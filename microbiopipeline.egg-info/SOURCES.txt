@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+MicroBioPipeline/MicroBioAnalysis.py
+MicroBioPipeline/__init__.py
+microbiopipeline.egg-info/PKG-INFO
+microbiopipeline.egg-info/SOURCES.txt
+microbiopipeline.egg-info/dependency_links.txt
+microbiopipeline.egg-info/requires.txt
+microbiopipeline.egg-info/top_level.txt

@@ -1,0 +1,16 @@
+[project]
+name = "microbiopipeline" # use lowercase, underscores; PyPI prefers this style
+version = "0.1.0"
+description = "Python library for general-purpose data analysis pipelines"
+authors = [{ name = "Mattia Santin", email = "mattia.santin@alumni.unive.it" }]
+license = { text = "Ca' Foscari" }
+dependencies = [
+    "pandas>=1.5.0",
+    "numpy>=1.21.0"
+]
+
+readme = "README.md"
+
+[build-system]
+requires = ["setuptools>=62", "wheel"]
+build-backend = "setuptools.build_meta"
