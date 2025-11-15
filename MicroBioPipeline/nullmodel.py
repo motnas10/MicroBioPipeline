@@ -33,7 +33,7 @@ def corr_pval_matrices_parallel_sym(
     axis: int = 0,
     method: str = "pearson",
     corr_func: Optional[Callable[[np.ndarray, np.ndarray], Tuple[float, float]]] = None,
-    n_jobs: Optional[int] = None,
+    n_jobs: Optional[int] = 5,
     ):
     """Compute correlation and p-value matrices in parallel, using matrix symmetry for efficiency."""
     from scipy.stats import pearsonr, spearmanr
