@@ -28,7 +28,7 @@ def _pair_corr(args):
     x, y, corr_func = args
     return corr_func(x, y)
 
-def corr_pval_matrices_parallel_sym(
+def corr_pval_matrices(
     df: pd.DataFrame,
     axis: int = 0,
     method: str = "pearson",
