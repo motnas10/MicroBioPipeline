@@ -15,40 +15,27 @@ from collections import namedtuple
 from emperor import Emperor
 from typing import Callable, Tuple, Optional
 import torch
-import pandas as pd
 from scipy.stats import t
+from typing import Optional, Callable, Tuple
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
+from tqdm import tqdm  # <-- Added for progress bar
 
 # --------------------------------------------------------------------------------------------------------------
 # Correlation and p-value matrices CPU version
-def corr_pval_matrices(
+def _pair_corr(args):
+    """Helper for parallel correlation computation."""
+    x, y, corr_func = args
+    return corr_func(x, y)
+
+def corr_pval_matrices_parallel_sym(
     df: pd.DataFrame,
     axis: int = 0,
     method: str = "pearson",
-    corr_func: Optional[Callable[[np.ndarray, np.ndarray], Tuple[float, float]]] = None
+    corr_func: Optional[Callable[[np.ndarray, np.ndarray], Tuple[float, float]]] = None,
+    n_jobs: Optional[int] = None,
     ):
-    """
-    Compute correlation and p-value matrices for a pandas DataFrame using one axis.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input dataframe.
-    axis : int, default 0
-        0: compute pairwise correlations between rows
-        1: compute pairwise correlations between columns
-    method : str, default "pearson"
-        Correlation type. "pearson", "spearman", or provide corr_func.
-    corr_func : callable, optional
-        Custom function: corr_func(x, y) -> (corr, pval).
-
-    Returns
-    -------
-    corr_df : pd.DataFrame
-        Matrix of correlation coefficients.
-    pval_df : pd.DataFrame
-        Matrix of p-values.
-    """
+    """Compute correlation and p-value matrices in parallel, using matrix symmetry for efficiency."""
     from scipy.stats import pearsonr, spearmanr
     if corr_func is None:
         if method == "pearson":
@@ -56,28 +43,37 @@ def corr_pval_matrices(
         elif method == "spearman":
             corr_func = spearmanr
         else:
-            raise ValueError("Unknown method; provide a corr_func or use 'pearson'/'spearman'.")
+            raise ValueError("Unknown method; provide corr_func or use 'pearson'/'spearman'.")
 
     if axis == 0:
-        # Analyze rows
         labels = df.index
         arrs = [df.loc[idx].values for idx in labels]
     elif axis == 1:
-        # Analyze columns
         labels = df.columns
         arrs = [df[col].values for col in labels]
     else:
         raise ValueError("axis must be 0 (rows) or 1 (columns)")
 
     n = len(arrs)
+    # Prepare only upper triangle tasks
+    tasks = [ (arrs[i], arrs[j], corr_func) for i in range(n) for j in range(i, n) ]
+
     corr_mat = np.zeros((n, n))
     pval_mat = np.zeros((n, n))
 
+    with ProcessPoolExecutor(max_workers=n_jobs) as executor:
+        results = list(executor.map(_pair_corr, tasks))
+
+    k = 0
     for i in range(n):
-        for j in range(n):
-            corr, pval = corr_func(arrs[i], arrs[j])
+        for j in range(i, n):
+            corr, pval = results[k]
             corr_mat[i, j] = corr
             pval_mat[i, j] = pval
+            if i != j:  # Fill symmetric position
+                corr_mat[j, i] = corr
+                pval_mat[j, i] = pval
+            k += 1
 
     corr_df = pd.DataFrame(corr_mat, index=labels, columns=labels)
     pval_df = pd.DataFrame(pval_mat, index=labels, columns=labels)
@@ -140,12 +136,15 @@ def corr_pval_matrices_GPU(
     pval_mat = torch.zeros((n, n), device=device)
 
     for i in range(n):
-        for j in range(n):
+        for j in range(i, n):
             x = arrs_torch[i]
             y = arrs_torch[j]
             corr, pval = corr_func(x, y)
             corr_mat[i, j] = corr
             pval_mat[i, j] = pval
+            if i != j:
+                corr_mat[j, i] = corr
+                pval_mat[j, i] = pval
 
     corr_np = corr_mat.cpu().numpy()
     pval_np = pval_mat.cpu().numpy()
@@ -154,7 +153,7 @@ def corr_pval_matrices_GPU(
     return corr_df, pval_df
 
 # --------------------------------------------------------------------------------------------------------------
-# Null correlation distribution
+# Null correlation distribution with progress bar
 def null_corr_distribution(
     df: pd.DataFrame,
     m: int,
@@ -189,15 +188,13 @@ def null_corr_distribution(
     # Store correlation matrices here
     corr_matrices = []
 
-    # Import the correlation functions (or define them)
-    # corr_pval_matrices(df: pd.DataFrame) -> np.ndarray
-    # corr_pval_matrices_GPU(df: pd.DataFrame) -> np.ndarray
     if use_gpu:
         corr_function = corr_pval_matrices_GPU
     else:
         corr_function = corr_pval_matrices
 
-    for _ in range(m):
+    # Add tqdm to the for loop for progress visualization
+    for _ in tqdm(range(m), desc="Generating null models"):
         df_shuf = df.copy()
         if axis == 0:
             # Shuffle each row independently
