@@ -3,6 +3,53 @@ from scipy.optimize import curve_fit
 from scipy.stats import t
 import matplotlib.pyplot as plt
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+def get_font_sizes(width, height, unit="in"):
+    """
+    Suggest font sizes for a matplotlib plot based on figure size.
+
+    Parameters
+    ----------
+    width : float
+        Width of the figure (in inches or millimeters).
+    height : float
+        Height of the figure (in inches or millimeters).
+    unit : str, optional
+        Unit of input dimensions: "in" for inches (default) or "mm" for millimeters.
+
+    Returns
+    -------
+    dict
+        Dictionary of recommended font sizes for consistent readability.
+    """
+
+    # Convert mm to inches if necessary
+    if unit.lower() == "mm":
+        width /= 25.4
+        height /= 25.4
+    elif unit.lower() != "in":
+        raise ValueError("Unit must be 'in' or 'mm'")
+
+    # Scale factor proportional to sqrt(area)
+    base_scale = (width * height) ** 0.5 / 5  # empirically tuned
+
+    font_sizes = {
+        'title': round(14 * base_scale),
+        'suptitle': round(16 * base_scale),
+        'axes_label': round(10 * base_scale),
+        'ticks_label': round(10 * base_scale),
+        'legend': round(10 * base_scale),
+        'legend_title': round(11 * base_scale),
+        'annotation': round(9 * base_scale),
+        'cbar_label': round(12 * base_scale),
+        'cbar_ticks': round(10 * base_scale),
+    }
+
+    return font_sizes
+
+
 # -------------------------------------------------------------------
 # 4-Parameter Logistic Function
 # -------------------------------------------------------------------
@@ -53,7 +100,7 @@ def fit_ic50(dilutions, responses, confidence=0.95, maxfev=10000):
             f"Number of dilutions ({len(dilutions)}) does not match "
             f"number of rows in responses ({responses.shape[0]})."
         )
-
+    
     # Flatten replicate data
     x = np.log10(np.repeat(dilutions, responses.shape[1]))
     y = responses.flatten()
@@ -69,7 +116,7 @@ def fit_ic50(dilutions, responses, confidence=0.95, maxfev=10000):
         p0=p0,
         maxfev=maxfev
     )
-
+    
     bottom, top, logIC50, hill_slope = params_fit
     IC50 = 10 ** logIC50
 
@@ -91,7 +138,7 @@ def fit_ic50(dilutions, responses, confidence=0.95, maxfev=10000):
         "hill_slope": hill_slope,
         "covariance": cov
     }
-
+    
     return IC50, IC50_CI, params
 
 
