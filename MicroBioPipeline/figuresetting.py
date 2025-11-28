@@ -40,7 +40,7 @@ def get_font_sizes(width, height, unit="in"):
         'title': round(14 * base_scale),
         'suptitle': round(16 * base_scale),
         'axes_label': round(10 * base_scale),
-        'ticks_label': round(5 * base_scale),
+        'ticks_label': round(10 * base_scale),
         'legend': round(10 * base_scale),
         'legend_title': round(11 * base_scale),
         'annotation': round(9 * base_scale),
