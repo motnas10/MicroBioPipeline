@@ -1,8 +1,15 @@
 README.md
 pyproject.toml
+MicroBioPipeline/IC50.py
 MicroBioPipeline/__init__.py
 MicroBioPipeline/correlations.py
+MicroBioPipeline/dimalanalysis.py
+MicroBioPipeline/figureplotting.py
+MicroBioPipeline/figuresetting.py
+MicroBioPipeline/filemanagement.py
+MicroBioPipeline/networkanalysis.py
 MicroBioPipeline/nullmodel.py
+MicroBioPipeline/qiime2_pipeline.py
 microbiopipeline.egg-info/PKG-INFO
 microbiopipeline.egg-info/SOURCES.txt
 microbiopipeline.egg-info/dependency_links.txt

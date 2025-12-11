@@ -70,3 +70,95 @@ def spearman_corr_pval(x: torch.Tensor, y: torch.Tensor):
     rx = rankdata_torch(x)
     ry = rankdata_torch(y)
     return pearson_corr_pval(rx, ry)
+
+import numpy as np
+import pandas as pd
+from statsmodels.stats.multitest import multipletests
+
+def pvalues_correction(pvalue_df, method='fdr_bh', alpha=0.05):
+    """
+    Apply multiple testing correction to p-values in a pandas DataFrame.
+    
+    Parameters
+    ----------
+    pvalue_df : pd.DataFrame
+        DataFrame containing p-values. Can be any shape.
+    method : str, default='fdr_bh'
+        Correction method to apply. Options:
+        - 'bonferroni', 'sidak', 'holm'
+        - 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky'
+        - 'none': no correction (returns original p-values)
+    alpha : float, default=0.05
+        Threshold for significance.
+    
+    Returns
+    -------
+    dict
+        - 'corrected_pvalues': DataFrame of corrected p-values
+        - 'rejected': DataFrame of boolean mask where True = significant
+        - 'method': correction method
+        - 'alpha': threshold
+        - 'n_tests': number of valid tests
+    """
+    # Flatten and track NaNs
+    pvals_flat = pvalue_df.values.flatten()
+    valid_mask = ~np.isnan(pvals_flat)
+    valid_pvals = pvals_flat[valid_mask]
+    n_tests = len(valid_pvals)
+    
+    if n_tests == 0:
+        raise ValueError("No valid p-values found in the DataFrame")
+    
+    # Initialize arrays
+    corrected_flat = pvals_flat.copy()
+    rejected_flat = np.zeros_like(pvals_flat, dtype=bool)
+    
+    # Apply correction
+    if method == 'none':
+        corrected_valid = valid_pvals
+        rejected_valid = valid_pvals <= alpha
+    
+    elif method == 'bonferroni':
+        corrected_valid = np.minimum(valid_pvals * n_tests, 1.0)
+        rejected_valid = corrected_valid <= alpha
+    
+    elif method == 'sidak':
+        corrected_valid = 1 - (1 - valid_pvals) ** n_tests
+        rejected_valid = corrected_valid <= alpha
+    
+    elif method == 'holm':
+        sort_idx = np.argsort(valid_pvals)
+        sorted_pvals = valid_pvals[sort_idx]
+        corrected_sorted = np.minimum.accumulate(sorted_pvals * np.arange(n_tests, 0, -1))
+        corrected_sorted = np.minimum(corrected_sorted, 1.0)
+        corrected_valid = np.empty(n_tests)
+        corrected_valid[sort_idx] = corrected_sorted
+        rejected_valid = corrected_valid <= alpha
+    
+    elif method in ['fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky']:
+        rejected_valid, corrected_valid, _, _ = multipletests(
+            valid_pvals, alpha=alpha, method=method.replace('fdr_', '')
+        )
+    
+    else:
+        raise ValueError(f"Unknown method: {method}")
+    
+    # Fill arrays
+    corrected_flat[valid_mask] = corrected_valid
+    rejected_flat[valid_mask] = rejected_valid
+    
+    # Reshape to original
+    corrected_df = pd.DataFrame(corrected_flat.reshape(pvalue_df.shape),
+                                index=pvalue_df.index,
+                                columns=pvalue_df.columns)
+    rejected_df = pd.DataFrame(rejected_flat.reshape(pvalue_df.shape),
+                               index=pvalue_df.index,
+                               columns=pvalue_df.columns)
+    
+    return {
+        'corrected_pvalues': corrected_df,
+        'rejected': rejected_df,
+        'method': method,
+        'alpha': alpha,
+        'n_tests': n_tests
+    }
