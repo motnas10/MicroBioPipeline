@@ -19,7 +19,7 @@ from scipy.stats import t
 from typing import Optional, Callable, Tuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from tqdm import tqdm  # <-- Added for progress bar
+from tqdm import tqdm
 
 # --------------------------------------------------------------------------------------------------------------
 # Correlation and p-value matrices CPU version

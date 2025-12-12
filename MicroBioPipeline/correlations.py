@@ -162,3 +162,166 @@ def pvalues_correction(pvalue_df, method='fdr_bh', alpha=0.05):
         'alpha': alpha,
         'n_tests': n_tests
     }
+
+
+# --------------------------------------------------------------------------------------------------------------
+# Correlation computation
+import numpy as np
+import pandas as pd
+from scipy.stats import fisher_exact, pearsonr, spearmanr, chi2_contingency
+from scipy.spatial.distance import braycurtis, euclidean, cityblock, cosine, correlation, hamming
+from sklearn.metrics import mutual_info_score
+
+def sparcc_correlation(data, eps=1e-6):
+    data = np.asarray(data, dtype=float)
+    data = np.where(data <= 0, eps, data)
+    log_data = np.log(data)
+    gm = log_data.mean(axis=1, keepdims=True)
+    clr = log_data - gm
+    cov = np.cov(clr.T)
+    var = np.diag(cov)
+    sd = np.sqrt(var)
+    sd[sd == 0] = np.nan
+    corr = cov / np.outer(sd, sd)
+    corr = np.clip(corr, -1, 1)
+    return corr
+
+def jaccard_manual(a, b):
+    inter = np.sum((a == 1) & (b == 1))
+    union = np.sum((a == 1) | (b == 1))
+    return inter / union if union > 0 else np.nan
+
+def fisher(a, b):
+    table = np.array([
+        [np.sum((a == 1) & (b == 1)), np.sum((a == 1) & (b == 0))],
+        [np.sum((a == 0) & (b == 1)), np.sum((a == 0) & (b == 0))]
+    ])
+    _, p = fisher_exact(table, alternative="two-sided")
+    return p
+
+def phi(a, b):
+    a1b1 = np.sum((a == 1) & (b == 1))
+    a1b0 = np.sum((a == 1) & (b == 0))
+    a0b1 = np.sum((a == 0) & (b == 1))
+    a0b0 = np.sum((a == 0) & (b == 0))
+    num = (a1b1 * a0b0) - (a1b0 * a0b1)
+    den = np.sqrt((a1b1 + a1b0) * (a1b1 + a0b1) * (a0b1 + a0b0) * (a1b0 + a0b0))
+    phi_val = num / den if den != 0 else np.nan
+    table = np.array([[a1b1, a1b0], [a0b1, a0b0]])
+    chi2, p, _, _ = chi2_contingency(table, correction=False)
+    return phi_val, p
+
+def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random_state=None):
+    """
+    Extended version: 
+    - 'permutations': int or None. If set, compute permutation-based p-values.
+    - The randomization will be done on the *second* series (B).
+    """
+    similarity_metrics = ["jaccard", "fisher", "phi", "pearson", "spearman", "mutual_info", "sparcc"]
+    distance_metrics = ["braycurtis", "euclidean", "cityblock", "cosine", "correlation", "hamming"]
+
+    if metric not in similarity_metrics + distance_metrics:
+        raise ValueError(f"Unknown metric: {metric}")
+
+    # orientation
+    if axis == 0:
+        df = df.T
+
+    if metric in ["jaccard", "fisher", "phi", "hamming", "mutual_info"]:
+        data = (df != 0).astype(int)
+    else:
+        data = df.copy()
+
+    features = data.columns
+    n = len(features)
+    val = pd.DataFrame(np.zeros((n, n)), index=features, columns=features)
+    pval = pd.DataFrame(np.full((n, n), np.nan), index=features, columns=features)
+
+    # Use a RandomState for reproducibility if provided
+    rng = np.random.RandomState(random_state)
+
+    # Make metric function
+    if metric == "pearson":
+        _func = lambda a, b: pearsonr(a, b)[0]
+        _pfunc = lambda a, b: pearsonr(a, b)[1]
+        mode = "higher"
+    elif metric == "spearman":
+        _func = lambda a, b: spearmanr(a, b)[0]
+        _pfunc = lambda a, b: spearmanr(a, b)[1]
+        mode = "higher"
+    elif metric == "jaccard":
+        _func = jaccard_manual
+        mode = "higher"
+    elif metric == "fisher":
+        _func = lambda a, b: np.nan
+        _pfunc = fisher
+        mode = "neither"  # Only p-value
+    elif metric == "phi":
+        _func = lambda a, b: phi(a, b)[0]
+        _pfunc = lambda a, b: phi(a, b)[1]
+        mode = "both"
+    elif metric == "mutual_info":
+        _func = lambda a, b: mutual_info_score(a, b) if (np.unique(a).size > 1 and np.unique(b).size > 1) else np.nan
+        mode = "higher"
+    elif metric == "sparcc":
+        data_sparcc = df.values.astype(float)
+        corr = sparcc_correlation(data_sparcc)
+        val.loc[:, :] = corr
+        pval.loc[:, :] = np.nan
+        return val, pval
+    else:
+        dist_funcs = {
+            'braycurtis': braycurtis,
+            'euclidean': euclidean,
+            'cityblock': cityblock,
+            'cosine': cosine,
+            'correlation': correlation,
+            'hamming': hamming
+        }
+        _func = dist_funcs[metric]
+        mode = "lower"
+
+    # Run main loop
+    for i in range(n):
+        for j in range(i, n):
+            a = data.iloc[:, i].values
+            b = data.iloc[:, j].values
+            # Observed
+            if metric == "fisher":
+                v = np.nan
+                p = _pfunc(a, b)
+            elif metric == "phi":
+                v, p = phi(a, b)
+            elif metric in ["pearson", "spearman"]:
+                v = _func(a, b)
+                p = _pfunc(a, b)
+            else:
+                v = _func(a, b)
+                p = np.nan
+
+            # Permutation-based p-value
+            if permutations is not None and metric not in ["fisher", "phi"]:  # For 'fisher' and 'phi', p-value handled analytically
+                perm_vals = []
+                for _ in range(permutations):
+                    if rng is not None:
+                        b_perm = rng.permutation(b)
+                    else:
+                        b_perm = np.random.permutation(b)
+                    try:
+                        perm_val = _func(a, b_perm)
+                    except Exception:
+                        perm_val = np.nan
+                    perm_vals.append(perm_val)
+                perm_vals = np.asarray(perm_vals)
+                if mode == "higher":
+                    p_perm = np.mean(perm_vals >= v)
+                elif mode == "lower":
+                    p_perm = np.mean(perm_vals <= v)
+                else:
+                    p_perm = np.nan
+                p = p_perm
+
+            val.iat[i, j] = val.iat[j, i] = v
+            pval.iat[i, j] = pval.iat[j, i] = p
+
+    return val, pval

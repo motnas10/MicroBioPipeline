@@ -25,6 +25,8 @@ from statsmodels.stats.multitest import multipletests
 import pandas as pd
 import networkx as nx
 
+from .figuresetting import get_font_sizes
+from .figuresetting import get_color_dict, pastelize_cmap
 
 # --------------------------------------------------------------------------------------------------------------
 # Define generalized statistical comparison function
@@ -219,6 +221,7 @@ def build_signed_weighted_network(corr_mat, p_mat, thr, node_attr=None,
     return G
 
 # --------------------------------------------------------------------------------------------------------------
+# Updated network plotting module with selectable layouts
 # Updated network plotting module with selectable layouts
 import numpy as np
 import pandas as pd
@@ -841,3 +844,479 @@ def check_metadata_column(metadata: pd.DataFrame, column: str):
         print(f"  → Will create LEGEND (categorical)")
     else:
         print(f"  → Will create COLORBAR (continuous)")
+
+
+
+# --------------------------------------------------------------------------------------------------------------
+# LRG-based community detection
+import numpy as np
+import matplotlib.pyplot as plt
+import networkx as nx
+from scipy.linalg import eigh
+from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
+from scipy.spatial.distance import squareform
+from sklearn.cluster import KMeans, SpectralClustering
+from sklearn.metrics import silhouette_score
+import plotly.graph_objects as go
+
+class LRGCommunityDetector:
+    def __init__(self, G, use_weights=True):
+        self.G = G
+        self.N = len(G)
+        self.use_weights = use_weights
+        if use_weights and nx.is_weighted(G):
+            self.L = nx.laplacian_matrix(G, weight='weight').toarray()
+        else:
+            self.L = nx.laplacian_matrix(G).toarray()
+        self.eigenvalues, self.eigenvectors = eigh(self.L)
+        self.tau_range = None
+        self.entropy = None
+        self.susceptibility = None
+        self.tau_peaks = None
+        
+    def compute_density_matrix(self, tau):
+        exp_tau_lambda = np.exp(-tau * self.eigenvalues)
+        Z = np.sum(exp_tau_lambda)
+        
+        # Compute eigenvalues of density matrix
+        eigenvalues_rho = exp_tau_lambda / Z
+        # Reconstruct density matrix
+        rho = self.eigenvectors @ np.diag(eigenvalues_rho) @ self.eigenvectors.T
+        
+        return rho, eigenvalues_rho
+
+    def compute_entropy(self, tau):
+        # Compute von Neumann entropy
+        _, eigenvalues_rho = self.compute_density_matrix(tau)
+        # Avoid log(0) by filtering out zero eigenvalues
+        nonzero_eigs = eigenvalues_rho[eigenvalues_rho > 1e-15]
+        # Normalized von Neumann entropy
+        S = - np.sum(nonzero_eigs * np.log10(nonzero_eigs)) / np.log10(self.N)
+        
+        return S
+
+    def compute_susceptibility(self, tau_range=None, n_points=1000):
+        # Determine tau range based on eigenvalues if not provided
+        self.lambda_max = self.eigenvalues[-1]
+        self.lambda_gap = self.eigenvalues[1] if self.eigenvalues[0] < 1e-10 else self.eigenvalues[0]
+
+        # Set default tau range
+        if tau_range is None:
+            tau_min = 1.0 / self.lambda_max
+            tau_max = 1.0 / self.lambda_gap
+        else:
+            tau_min, tau_max = tau_range
+        
+        # Logarithmically spaced tau values
+        self.tau_range = np.logspace(np.log10(tau_min), np.log10(tau_max), n_points)
+
+        # Compute entropy for each tau
+        self.entropy = np.array([self.compute_entropy(tau) for tau in self.tau_range])
+        
+        # Compute susceptibility as negative gradient of entropy w.r.t. log10(tau)
+        log_tau = np.log10(self.tau_range)
+
+        # Numerical gradient
+        self.susceptibility = - np.gradient(self.entropy, log_tau)
+
+        return self.tau_range, self.entropy, self.susceptibility
+
+    def find_characteristic_scales(self, prominence=0.0):
+        from scipy.signal import find_peaks
+        # Ensure susceptibility is computed
+        if self.susceptibility is None:
+            self.compute_susceptibility()
+
+        # Find peaks in susceptibility
+        peaks, properties = find_peaks(self.susceptibility, prominence=prominence)
+
+        # Compute derivative of susceptibility
+        dchi_dlogtau = np.gradient(self.susceptibility, np.log10(self.tau_range))
+
+        # Get tau values at peaks ensuring null derivative
+        valid_peaks = []
+        for peak in peaks:
+            if abs(dchi_dlogtau[peak]) < 1e-2:
+                valid_peaks.append(peak)
+        self.tau_peaks = self.tau_range[valid_peaks]
+
+        return self.tau_peaks
+
+    def compute_communicability(self, tau):
+        # Compute communicability matrix K = exp(-tau * L)
+        exp_tau_lambda = np.exp(-tau * self.eigenvalues)
+        # Reconstruct K
+        K = self.eigenvectors @ np.diag(exp_tau_lambda) @ self.eigenvectors.T
+
+        return K
+
+    def compute_distance_matrix(self, tau):
+        # Compute distance matrix D from communicability
+        K = self.compute_communicability(tau)
+        # Avoid division by zero on diagonal
+        D = np.zeros_like(K)
+        mask = ~np.eye(self.N, dtype=bool)
+        D[mask] = 1.0 / K[mask]
+        return D
+
+    def compute_partition_stability(self, Z, tau):
+        delta = np.sort(Z[:, 2])[::-1]
+
+        # Extend boundaries
+        delta_extended = np.concatenate([[delta[0] / 10], delta, [delta[-1] * 10]])
+        log_delta = np.log10(delta_extended + 1e-15)
+
+        # Compute differences
+        log_diff = log_delta[:-1] - log_delta[1:]
+
+        # Norm (first and last *real* values)
+        norm = log_delta[1] - log_delta[-2]
+        if abs(norm) < 1e-10:
+            norm = 1.0
+
+        N = 1.0 / norm
+        psi = N * log_diff
+
+        # Only real splits for psi (exclude extended ends)
+        psi = psi[1:-1]
+
+        # Index of optimal gap
+        optimal_n_clusters = np.argmax(psi) + 2
+
+        print(f"Optimal index: {optimal_n_clusters}, Psi value: \n{psi}")
+
+        return psi, optimal_n_clusters
+
+    def detect_communities_at_scale(self, tau, method='hierarchical', n_clusters=None, return_linkage=False):
+        # Compute distance matrix
+        D = self.compute_distance_matrix(tau)
+        # Hierarchical clustering
+        if method == 'hierarchical':
+            D_condensed = squareform(D, checks=False)
+            Z = linkage(D_condensed, method='average')
+            if n_clusters is None:
+                psi, n_clusters = self.compute_partition_stability(Z, tau)
+            labels = fcluster(Z, n_clusters, criterion='maxclust') - 1
+            # Compute silhouette score
+            if len(np.unique(labels)) > 1:
+                score = silhouette_score(D, labels, metric='precomputed')
+            else:
+                score = 0.0
+            # Return labels and optionally linkage matrix
+            if return_linkage:
+                return labels, score, Z
+            else:
+                return labels, score
+        
+        # K-means clustering
+        elif method == 'kmeans':
+            K = self.compute_communicability(tau)
+            if n_clusters is None:
+                n_clusters = self._estimate_n_clusters(K)
+            # Perform K-means clustering
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(K)
+            # Compute silhouette score
+            score = silhouette_score(D, labels, metric='precomputed')
+            
+            return labels, score
+        
+        # Spectral clustering
+        elif method == 'spectral':
+            if n_clusters is None:
+                n_clusters = self._estimate_n_clusters(self.compute_communicability(tau))
+            # Perform spectral clustering
+            spectral = SpectralClustering(n_clusters=n_clusters, affinity='precomputed', random_state=42)
+            K = self.compute_communicability(tau)
+            labels = spectral.fit_predict(K)
+            # Compute silhouette score
+            score = silhouette_score(D, labels, metric='precomputed')
+            
+            return labels, score
+        
+        else:
+            raise ValueError(f"Unknown method: {method}")
+
+    def _estimate_n_clusters(self, X, max_clusters=100):
+        scores = []
+        K_range = range(2, min(max_clusters + 1, self.N))
+        # Evaluate silhouette scores for different k
+        for k in K_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(X)
+            score = silhouette_score(X, labels)
+            scores.append(score)
+        # Select k with highest silhouette score
+        optimal_k = K_range[np.argmax(scores)]
+
+        return optimal_k
+
+    def detect_metastable_nodes(self, tau_values, method='hierarchical'):
+        n_scales = len(tau_values)
+        labels_matrix = np.zeros((n_scales, self.N), dtype=int)
+        # Detect communities at each scale
+        for i, tau in enumerate(tau_values):
+            labels, _ = self.detect_communities_at_scale(tau, method=method)
+            labels_matrix[i, :] = labels
+        # Compute stability scores
+        stability_scores = np.zeros(self.N)
+        for node in range(self.N):
+            transitions = np.sum(labels_matrix[:-1, node] != labels_matrix[1:, node])
+            stability_scores[node] = 1.0 - (transitions / (n_scales - 1))
+        # Identify metastable nodes
+        threshold = 0.5
+        metastable_indices = np.where(stability_scores < threshold)[0]
+        
+        return metastable_indices, stability_scores, labels_matrix
+
+# Visualization functions
+def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
+    """Plot LRG analysis results including entropy, susceptibility, spectrum, and network."""
+    # Ensure susceptibility is computed
+    if detector.susceptibility is None:
+        detector.compute_susceptibility()
+    
+    # Find characteristic scales
+    tau_peaks = detector.find_characteristic_scales()
+    
+    # Compute specific heat (second derivative)
+    log_tau = np.log10(detector.tau_range)
+    d_specific_heat = np.gradient(np.gradient(detector.entropy, log_tau), log_tau)
+    
+    font_size = get_font_sizes(figsize[0], figsize[1], "in")
+    
+    # Entropy
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    ax.semilogx(detector.tau_range, detector.entropy, 'b')
+    ax.set_xlabel(r'Diffusion time $\tau$', fontsize=font_size['axes_label'])
+    ax.set_ylabel(r'Entropy $S(\tau)$', fontsize=font_size['axes_label'])
+    ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    ax.set_title('Network Entropy', fontsize=font_size['title'], pad=20)
+    ax.grid(True, alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+    
+    # Susceptibility & Specific Heat
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    ln1 = ax.semilogx(detector.tau_range, detector.susceptibility, 'r-', label='Susceptibility')
+    ax.scatter(tau_peaks, detector.susceptibility[np.isin(detector.tau_range, tau_peaks)], 
+               s=150, c='red', marker='*', zorder=5, label='Peaks', edgecolors='black', linewidths=1.5)
+    ax.set_xlabel(r'Diffusion time $\tau$', fontsize=font_size['axes_label'])
+    ax.set_ylabel(r'Susceptibility $C(\tau)$', fontsize=font_size['axes_label'], color='red')
+    ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    ax.set_title('Entropic Susceptibility and Specific Heat', fontsize=font_size['title'], pad=20)
+    ax.grid(True, alpha=0.5)
+    
+    ax2 = ax.twinx()
+    ln2 = ax2.semilogx(detector.tau_range, d_specific_heat, 'g--', label='Derivative of Susceptibility')
+    ax2.axhline(0, color='gray', linestyle='--', alpha=1)
+    ax2.set_ylabel(r'Derivative of Susceptibility', fontsize=font_size['axes_label'], color='green')
+    ax2.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    handles1, labels1 = ax.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax2.legend(handles1+handles2, labels1+labels2, loc='best', fontsize=font_size['legend'])
+    plt.tight_layout()
+    plt.show()
+    
+    # Laplacian Spectrum
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    # ax.semilogy(detector.eigenvalues, 'o-', markersize=8, alpha=0.8)
+    ax.plot(detector.eigenvalues, 'o-', markersize=8, alpha=0.8)
+    ax.set_xlabel('Index', fontsize=font_size['axes_label'])
+    ax.set_ylabel(r'Eigenvalue $\lambda$', fontsize=font_size['axes_label'])
+    ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    ax.set_title(f'Laplacian Spectrum\n' + r'$\lambda_{max}$' + f' = {detector.eigenvalues.max():.2g}' +
+                 r' - $\lambda_{gap}$' + f' = {detector.lambda_gap:.2g}',
+                 fontsize=font_size['title'], pad=20)
+    ax.grid(True, alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+    
+    # Network Visualization
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    if G is not None:
+        if pos is None:
+            pos = nx.spring_layout(G, seed=42)
+        # Color edges by weight when available; fallback to gray
+        edges = list(G.edges(data=True))
+        if edges:
+            edge_weights = [d.get('weight', 1.0) for (_, _, d) in edges]
+            w_min, w_max = min(edge_weights), max(edge_weights)
+            if np.isclose(w_min, w_max):
+                w_min, w_max = w_min - 1, w_max + 1
+            edge_cmap = plt.cm.get_cmap('coolwarm')
+            edge_colors = edge_weights
+            edge_vmin, edge_vmax = w_min, w_max
+        else:
+            edge_cmap = None
+            edge_colors = 'gray'
+            edge_vmin = edge_vmax = None
+        nx.draw_networkx(G, pos, ax=ax, node_color='lightblue', 
+                        node_size=500, with_labels=True, font_size=font_size['node_label'],
+                        edge_color=edge_colors, edge_cmap=edge_cmap,
+                        edge_vmin=edge_vmin, edge_vmax=edge_vmax, width=1)
+        ax.set_title(f'Network (N={len(G)})', fontsize=font_size['title'], pad=20)
+        ax.axis('off')
+    else:
+        ax.axis('off')
+        ax.text(0.5, 0.5, 'Network visualization\n(G not provided)', 
+                horizontalalignment='center', verticalalignment='center',
+                fontsize=font_size['title'])
+    plt.tight_layout()
+    plt.show()
+    
+    print(f"\nFound {len(tau_peaks)} characteristic scales:")
+    for i, tau in enumerate(tau_peaks):
+        print(f"  τ*_{i+1} = {tau:.4g}")
+    
+    return tau_peaks
+
+# Plot dendrogram and community graph
+def plot_dendrogram(Z, G, pos, labels, tau=None, figsize=(12, 6)):
+    """
+    Plots hierarchical clustering dendrogram (log-scale distance) and the community graph.
+    """
+
+    font_size = get_font_sizes(figsize[0], figsize[1], "in")
+    
+    # Dendrogram
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    dn = dendrogram(Z, ax=ax, color_threshold=Z[-len(np.unique(labels))+1, 2])
+    ax.set_xlabel('Node Index', fontsize=font_size['axes_label'])
+    ax.set_ylabel('Distance (log scale)', fontsize=font_size['axes_label'])
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=font_size['ticks_label'])
+    ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    ax.set_title(f'Hierarchical Dendrogram' + (f'\nτ={tau:.3g}' if tau is not None else ''), fontsize=font_size['title'], pad=20)
+    plt.tight_layout()
+    plt.show()
+
+# Community graph
+def plot_communities(G, pos, labels, tau=None, figsize=(12, 6)):
+    """
+    Docstring for plot_communities
+    
+    :param G: Description
+    :param pos: Description
+    :param labels: Description
+    :param tau: Description
+    :param figsize: Description
+    """
+
+    font_size = get_font_sizes(figsize[0], figsize[1], "in")
+
+    # Community Graph
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    
+    cluster_cmap = pastelize_cmap(plt.cm.tab10, N=256, sat_scale=0.9, light_offset=0.2)
+    cluster_colors = cluster_cmap(labels / labels.max())
+    nx.draw_networkx(G, pos, ax=ax, node_color=cluster_colors, 
+                     node_size=500, with_labels=True, font_size=font_size['node_label'],
+                     edge_color='gray', width=1.5)
+    ax.set_title(f'Communities ({len(np.unique(labels))} clusters)' + (f'\nτ={tau:.3g}' if tau is not None else ''), 
+                fontsize=font_size['title'], pad=20)
+    ax.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+# Plot metastable nodes
+def plot_metastable_nodes(G, pos, metastable_indices, stability_scores, figsize=(10, 8)):
+    
+    font_size = get_font_sizes(figsize[0], figsize[1], "in")
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    if pos is None:
+        pos = nx.spring_layout(G, seed=42)
+    
+    node_colors = ['red' if i in metastable_indices else 'lightblue' 
+                   for i in range(len(G))]
+    
+    node_sizes = [300 + 500 * (1 - stability_scores[i]) for i in range(len(G))]
+    
+    nx.draw_networkx(G, pos, ax=ax, node_color=node_colors, 
+                     node_size=node_sizes, with_labels=True, font_size=font_size['node_label'],
+                     edge_color='gray', width=1.5, alpha=0.7)
+    
+    ax.set_title('Metastable Nodes (red = unstable across scales)', 
+                fontsize=font_size['title'])
+    ax.axis('off')
+    
+    plt.tight_layout()
+    plt.show()
+
+# Plot Sankey diagram for community evolution
+def plot_sankey_diagram(labels_df, tau_values):    
+    N, n_scales = labels_df.shape
+
+    print(labels_df)
+    
+    sources = []
+    targets = []
+    values = []
+    labels = []
+    offset = 0
+    node_map = {}
+    for i, scale in enumerate(labels_df.columns):
+        unique_communities = np.unique(labels_df.iloc[:, i])
+        for comm in unique_communities:
+            node_id = offset + comm
+            node_map[(i, comm)] = node_id
+            # FIRST SCALE: use index labels as node labels
+            if i == 0:
+                # For each occurrence of comm in column i, label with index
+                matching_indices = labels_df.index[labels_df.iloc[:, i] == comm]
+                for idx in matching_indices:
+                    labels.append(str(idx))
+            else:
+                labels.append(f"C{comm}")
+        offset += len(unique_communities)
+    
+    # Adjust for node id mapping and label order in multi-index
+    sources = []
+    targets = []
+    values = []
+    for scale in range(n_scales - 1):
+        for node in range(N):
+            src_comm = labels_df.iloc[node, scale]
+            tgt_comm = labels_df.iloc[node, scale+1]
+            src_id = node_map[(scale, src_comm)]
+            tgt_id = node_map[(scale + 1, tgt_comm)]
+            try:
+                idx = list(zip(sources, targets)).index((src_id, tgt_id))
+                values[idx] += 1
+            except ValueError:
+                sources.append(src_id)
+                targets.append(tgt_id)
+                values.append(1)
+
+    # If you want only the first scale nodes to get the 'labels_df.index' label,
+    # and later-scale communities just get 'C{comm}', you'll need to shift offset for each index label, possibly
+    # Use this for simple cases and adapt as needed for complex community merges
+
+    font_size = get_font_sizes(10, 6, "in")
+
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=50,
+            line=dict(color="black", width=0.5),
+            label=labels,
+        ),
+        link=dict(
+            source=sources,
+            target=targets,
+            value=values,
+        )
+    )])
+
+    h = N * 30
+    w = max(1000, n_scales * 300)
+
+    fig.update_layout(
+        title_text="Community Evolution Across Scales",
+        font_size=font_size['title'],
+        height=h,
+        width=w,
+    )
+    
+    fig.show()
