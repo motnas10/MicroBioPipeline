@@ -569,6 +569,8 @@ class NetworkPlotter:
         marker_by: Optional[str] = None,
         default_node_shape: str = "o",
         cmap: Union[str, mpl.colors.Colormap] = "viridis",
+        edge_vmin: float = -1.0,
+        edge_vmax: float = 1.0,
         figsize: Tuple[int, int] = (10, 10),
         fig: Optional[plt.Figure] = None,
         ax: Optional[plt.Axes] = None,
@@ -577,6 +579,7 @@ class NetworkPlotter:
         edge_alpha: float = 0.8,
         node_alpha: float = 0.9,
         node_linewidth: float = 1.0,
+        legend: bool = True,
         label_font_size: int = 10,
         legend_font_size: int = 10,
         title_font_size: int = 12,
@@ -594,6 +597,8 @@ class NetworkPlotter:
             marker_by: Metadata column for node shapes
             default_node_shape: Default marker shape
             cmap: Colormap for edges and continuous node colors
+            edge_vmin: Minimum edge color value
+            edge_vmax: Maximum edge color value
             figsize: Figure size
             fig, ax: Existing figure/axes (for subplots)
             title: Plot title
@@ -635,7 +640,7 @@ class NetworkPlotter:
             node_sizes = {n: styler.default_size for n in self.nodelist}
         
         # Draw edges
-        self._draw_edges(ax, cmap, edge_width_scale, edge_alpha)
+        self._draw_edges(ax, cmap, edge_vmin, edge_vmax, edge_width_scale, edge_alpha)
         
         # Draw nodes
         self._draw_nodes(
@@ -647,7 +652,7 @@ class NetworkPlotter:
         nx.draw_networkx_labels(self.G, self.pos, ax=ax, font_size=label_font_size)
         
         # Add edge colorbar
-        edge_sm = self._create_edge_scalar_mappable(cmap)
+        edge_sm = self._create_edge_scalar_mappable(cmap, edge_vmin, edge_vmax)
         cbar = fig.colorbar(edge_sm, ax=ax)
         cbar.set_label(f"{self.metric.capitalize()}", fontsize=colorbar_font_size)
         cbar.ax.tick_params(labelsize=colorbar_font_size)
@@ -660,10 +665,11 @@ class NetworkPlotter:
         
         # Add legends
         self._add_legends(
+            legend,
             ax, color_legend, marker_legend, 
             color_by, marker_by, legend_font_size
         )
-        
+
         ax.axis('off')
 
         if title is not None:
@@ -679,6 +685,8 @@ class NetworkPlotter:
         self, 
         ax: plt.Axes, 
         cmap: Union[str, mpl.colors.Colormap],
+        edge_vmin: float,
+        edge_vmax: float,
         width_scale: float,
         alpha: float
     ):
@@ -694,7 +702,8 @@ class NetworkPlotter:
             edgelist=list(self.G.edges),
             edge_color=edge_corr_values,
             edge_cmap=edge_cmap,
-            edge_vmin=-1, edge_vmax=1,
+            edge_vmin=edge_vmin,
+            edge_vmax=edge_vmax,
             width=edge_widths,
             alpha=alpha
         )
@@ -742,10 +751,12 @@ class NetworkPlotter:
     
     def _create_edge_scalar_mappable(
         self, 
-        cmap: Union[str, mpl.colors.Colormap]
+        cmap: Union[str, mpl.colors.Colormap],
+        edge_vmin: float = -1.0,
+        edge_vmax: float = 1.0
     ) -> mpl.cm.ScalarMappable:
         """Create scalar mappable for edge colorbar."""
-        edge_norm = mpl.colors.Normalize(vmin=-1, vmax=1)
+        edge_norm = mpl.colors.Normalize(vmin=edge_vmin, vmax=edge_vmax)
         edge_cmap = plt.cm.get_cmap(cmap)
         sm = mpl.cm.ScalarMappable(norm=edge_norm, cmap=edge_cmap)
         sm.set_array([])
@@ -753,6 +764,7 @@ class NetworkPlotter:
     
     def _add_legends(
         self,
+        legend: bool,
         ax: plt.Axes,
         color_legend: Optional[List],
         marker_legend: Optional[List],
@@ -765,39 +777,42 @@ class NetworkPlotter:
         has_color_legend = color_legend is not None and len(color_legend) > 0
         has_marker_legend = marker_legend is not None and len(marker_legend) > 0
         
-        if has_color_legend and has_marker_legend:
-            # Combine both legends
-            handles = color_legend + marker_legend
-            legend = ax.legend(
-                handles=handles, 
-                loc="best", 
-                frameon=True,
-                fontsize=font_size
-            )
-            if legend:
-                legend.set_zorder(1000)
-        elif has_color_legend:
-            legend = ax.legend(
-                handles=color_legend, 
-                title=color_by, 
-                loc="upper left", 
-                frameon=True,
-                fontsize=font_size,
-                title_fontsize=font_size
-            )
-            if legend:
-                legend.set_zorder(1000)
-        elif has_marker_legend:
-            legend = ax.legend(
-                handles=marker_legend, 
-                title=marker_by, 
-                loc="lower left", 
-                frameon=True,
-                fontsize=font_size,
-                title_fontsize=font_size
-            )
-            if legend:
-                legend.set_zorder(1000)
+        if legend:
+            if has_color_legend and has_marker_legend:
+                # Combine both legends
+                handles = color_legend + marker_legend
+                legend = ax.legend(
+                    handles=handles, 
+                    loc="best", 
+                    frameon=True,
+                    fontsize=font_size
+                )
+                if legend:
+                    legend.set_zorder(1000)
+            elif has_color_legend:
+                legend = ax.legend(
+                    handles=color_legend, 
+                    title=color_by, 
+                    loc="upper left", 
+                    frameon=True,
+                    fontsize=font_size,
+                    title_fontsize=font_size
+                )
+                if legend:
+                    legend.set_zorder(1000)
+            elif has_marker_legend:
+                legend = ax.legend(
+                    handles=marker_legend, 
+                    title=marker_by, 
+                    loc="lower left", 
+                    frameon=True,
+                    fontsize=font_size,
+                    title_fontsize=font_size
+                )
+                if legend:
+                    legend.set_zorder(1000)
+        else:
+            ax.legend_.remove() if ax.legend_ else None
 
 
 # Convenience functions for backward compatibility
@@ -877,12 +892,10 @@ class LRGCommunityDetector:
     def compute_density_matrix(self, tau):
         exp_tau_lambda = np.exp(-tau * self.eigenvalues)
         Z = np.sum(exp_tau_lambda)
-        
         # Compute eigenvalues of density matrix
         eigenvalues_rho = exp_tau_lambda / Z
         # Reconstruct density matrix
         rho = self.eigenvectors @ np.diag(eigenvalues_rho) @ self.eigenvectors.T
-        
         return rho, eigenvalues_rho
 
     def compute_entropy(self, tau):
@@ -892,33 +905,26 @@ class LRGCommunityDetector:
         nonzero_eigs = eigenvalues_rho[eigenvalues_rho > 1e-15]
         # Normalized von Neumann entropy
         S = - np.sum(nonzero_eigs * np.log10(nonzero_eigs)) / np.log10(self.N)
-        
         return S
 
     def compute_susceptibility(self, tau_range=None, n_points=1000):
         # Determine tau range based on eigenvalues if not provided
         self.lambda_max = self.eigenvalues[-1]
         self.lambda_gap = self.eigenvalues[1] if self.eigenvalues[0] < 1e-10 else self.eigenvalues[0]
-
         # Set default tau range
         if tau_range is None:
             tau_min = 1.0 / self.lambda_max
             tau_max = 1.0 / self.lambda_gap
         else:
-            tau_min, tau_max = tau_range
-        
+            tau_min, tau_max = tau_range        
         # Logarithmically spaced tau values
         self.tau_range = np.logspace(np.log10(tau_min), np.log10(tau_max), n_points)
-
         # Compute entropy for each tau
         self.entropy = np.array([self.compute_entropy(tau) for tau in self.tau_range])
-        
         # Compute susceptibility as negative gradient of entropy w.r.t. log10(tau)
         log_tau = np.log10(self.tau_range)
-
         # Numerical gradient
         self.susceptibility = - np.gradient(self.entropy, log_tau)
-
         return self.tau_range, self.entropy, self.susceptibility
 
     def find_characteristic_scales(self, prominence=0.0):
@@ -926,20 +932,15 @@ class LRGCommunityDetector:
         # Ensure susceptibility is computed
         if self.susceptibility is None:
             self.compute_susceptibility()
-
         # Find peaks in susceptibility
         peaks, properties = find_peaks(self.susceptibility, prominence=prominence)
-
         # Compute derivative of susceptibility
         dchi_dlogtau = np.gradient(self.susceptibility, np.log10(self.tau_range))
-
         # Get tau values at peaks ensuring null derivative
         valid_peaks = []
         for peak in peaks:
-            if abs(dchi_dlogtau[peak]) < 1e-2:
-                valid_peaks.append(peak)
+            valid_peaks.append(peak)
         self.tau_peaks = self.tau_range[valid_peaks]
-
         return self.tau_peaks
 
     def compute_communicability(self, tau):
@@ -947,7 +948,6 @@ class LRGCommunityDetector:
         exp_tau_lambda = np.exp(-tau * self.eigenvalues)
         # Reconstruct K
         K = self.eigenvectors @ np.diag(exp_tau_lambda) @ self.eigenvectors.T
-
         return K
 
     def compute_distance_matrix(self, tau):
@@ -959,33 +959,258 @@ class LRGCommunityDetector:
         D[mask] = 1.0 / K[mask]
         return D
 
-    def compute_partition_stability(self, Z, tau):
+    # def compute_partition_stability(self, Z, tau):
+    #     delta = np.sort(Z[:, 2])[::-1]
+
+    #     # Extend boundaries
+    #     delta_extended = np.concatenate([[delta[0] / 10], delta, [delta[-1] * 10]])
+    #     log_delta = np.log10(delta_extended + 1e-15)
+
+    #     # Compute differences
+    #     log_diff = log_delta[:-1] - log_delta[1:]
+
+    #     # Norm (first and last *real* values)
+    #     norm = log_delta[1] - log_delta[-2]
+    #     if abs(norm) < 1e-10:
+    #         norm = 1.0
+
+    #     N = 1.0 / norm
+    #     psi = N * log_diff
+
+    #     # Only real splits for psi (exclude extended ends)
+    #     psi = psi[1:-1]
+
+    #     # Index of optimal gap
+    #     optimal_n_clusters = np.argmax(psi) + 2
+
+    #     print(f"Optimal index: {optimal_n_clusters}, Psi value: \n{psi}")
+
+    #     return psi, optimal_n_clusters
+    
+    ########################################################
+    def compute_partition_stability(self, Z, tau=None, method='combined'):
+        """
+        Compute partition stability to find optimal number of clusters.
+        
+        Parameters:
+        -----------
+        Z : ndarray
+            Linkage matrix from hierarchical clustering
+        tau : float, optional
+            Threshold parameter (currently unused, can be for future extensions)
+        method : str
+            'log_gap', 'acceleration', 'combined', or 'all'
+        
+        Returns:
+        --------
+        dict with stability metrics and optimal cluster number
+        """
+        
+        # Get merge distances (heights)
+        delta = np.sort(Z[:, 2])[::-1]  # Descending order
+        n_samples = Z.shape[0] + 1
+        n_possible_clusters = len(delta)
+        
+        results = {}
+        
+        # ===== Method 1: Improved Log-Gap (your original approach) =====
+        if method in ['log_gap', 'combined', 'all']:
+            # Use log1p for numerical stability instead of log10(delta + eps)
+            log_delta = np.log1p(delta)
+            
+            # Compute consecutive differences (gap sizes)
+            log_diff = log_delta[:-1] - log_delta[1:]
+            
+            # Normalize by total range
+            norm = log_delta[0] - log_delta[-1]
+            if abs(norm) < 1e-10:
+                norm = 1.0
+            
+            psi_log = log_diff / norm
+            optimal_log = np.argmax(psi_log) + 2
+            
+            results['psi_log'] = psi_log
+            results['optimal_log'] = optimal_log
+        
+        # ===== Method 2: Acceleration (Second Derivative) =====
+        if method in ['acceleration', 'combined', 'all']:
+            # Compute first derivative (rate of change)
+            first_diff = np.diff(delta)
+            
+            # Compute second derivative (acceleration)
+            second_diff = np.diff(first_diff)
+            
+            # Normalize
+            if np.max(np.abs(second_diff)) > 1e-10:
+                psi_accel = second_diff / np. max(np.abs(second_diff))
+            else:
+                psi_accel = second_diff
+            
+            # Find maximum jump (most negative acceleration = biggest elbow)
+            optimal_accel = np.argmin(psi_accel) + 2
+            
+            results['psi_accel'] = psi_accel
+            results['optimal_accel'] = optimal_accel
+        
+        # ===== Method 3: Relative Gap =====
+        if method in ['combined', 'all']:
+            # Compute relative gap:  (delta[i] - delta[i+1]) / delta[i+1]
+            relative_gap = np.zeros(len(delta) - 1)
+            for i in range(len(delta) - 1):
+                if delta[i+1] > 1e-10:
+                    relative_gap[i] = (delta[i] - delta[i+1]) / delta[i+1]
+                else:
+                    relative_gap[i] = 0
+            
+            optimal_relative = np.argmax(relative_gap) + 2
+            
+            results['psi_relative'] = relative_gap
+            results['optimal_relative'] = optimal_relative
+        
+        # ===== Method 4: Calinski-Harabasz inspired metric =====
+        if method == 'all':
+            # Ratio of between-cluster to within-cluster variance proxy
+            psi_ch = np.zeros(len(delta))
+            for i in range(len(delta)):
+                n_clusters = i + 2
+                if n_clusters < n_samples:
+                    # Higher delta = better separation at this level
+                    # Normalized by number of clusters
+                    psi_ch[i] = delta[i] * (n_samples - n_clusters) / (n_clusters - 1)
+            
+            optimal_ch = np. argmax(psi_ch) + 2
+            
+            results['psi_ch'] = psi_ch
+            results['optimal_ch'] = optimal_ch
+        
+        # ===== Combined Score =====
+        if method == 'combined':
+            # Normalize all metrics to [0, 1]
+            psi_log_norm = (psi_log - psi_log.min()) / (psi_log.max() - psi_log.min() + 1e-10)
+            
+            # Pad acceleration to match length
+            psi_accel_padded = np.zeros(len(psi_log_norm))
+            psi_accel_norm = (psi_accel - psi_accel.min()) / (psi_accel.max() - psi_accel.min() + 1e-10)
+            psi_accel_padded[: len(psi_accel_norm)] = psi_accel_norm
+            
+            psi_rel_norm = (relative_gap - relative_gap.min()) / (relative_gap.max() - relative_gap.min() + 1e-10)
+            
+            # Combined weighted score
+            psi_combined = (0.4 * psi_log_norm + 
+                        0.4 * psi_rel_norm + 
+                        0.2 * psi_accel_padded[: len(psi_rel_norm)])
+            
+            optimal_combined = np.argmax(psi_combined) + 2
+            
+            results['psi_combined'] = psi_combined
+            results['optimal_combined'] = optimal_combined
+        
+        # ===== Return results based on method =====
+        if method == 'log_gap':
+            return results['psi_log'], results['optimal_log']
+        elif method == 'acceleration': 
+            return results['psi_accel'], results['optimal_accel']
+        elif method == 'combined':
+            optimal_n_clusters = results['optimal_combined']
+        else:  # 'all'
+            # Vote among methods
+            votes = [results. get(f'optimal_{m}', 0) 
+                    for m in ['log', 'accel', 'relative', 'ch']]
+            optimal_n_clusters = int(np.median(votes))
+            results['optimal_vote'] = optimal_n_clusters
+        
+        # Print diagnostics
+        print(f"Optimal number of clusters: {optimal_n_clusters}")
+        if method in ['combined', 'all']:
+            print(f"  - Log-gap suggests:  {results. get('optimal_log', 'N/A')}")
+            print(f"  - Acceleration suggests: {results.get('optimal_accel', 'N/A')}")
+            print(f"  - Relative gap suggests:  {results.get('optimal_relative', 'N/A')}")
+            if method == 'all':
+                print(f"  - CH-inspired suggests: {results.get('optimal_ch', 'N/A')}")
+        
+        return results, optimal_n_clusters
+
+
+    def visualize_stability(self, Z, results, method='combined'):
+        """
+        Visualize the partition stability metrics.
+        """
+        import matplotlib.pyplot as plt
+        
+        n_clusters_range = np.arange(2, len(Z[: , 2]) + 2)
+        
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        
+        # Plot 1: Dendrogram with cut line
+        from scipy.cluster.hierarchy import dendrogram
+        ax = axes[0, 0]
+        dendrogram(Z, ax=ax, no_labels=True)
+        
+        if method == 'combined':
+            optimal = results['optimal_combined']
+            threshold = Z[-(optimal-1), 2]
+        else:
+            optimal = results. get('optimal_vote', results. get('optimal_log', 2))
+            threshold = Z[-(optimal-1), 2]
+        
+        ax.axhline(y=threshold, color='r', linestyle='--', linewidth=2, 
+                label=f'Cut at k={optimal}')
+        ax.set_title('Dendrogram with Optimal Cut')
+        ax.legend()
+        
+        # Plot 2: Merge distances
+        ax = axes[0, 1]
         delta = np.sort(Z[:, 2])[::-1]
+        ax.plot(n_clusters_range, delta, 'o-', linewidth=2)
+        ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2)
+        ax.set_xlabel('Number of Clusters')
+        ax.set_ylabel('Merge Distance (Height)')
+        ax.set_title('Linkage Distances')
+        ax.grid(True, alpha=0.3)
+        
+        # Plot 3: Stability metrics
+        ax = axes[1, 0]
+        if 'psi_combined' in results:
+            psi = results['psi_combined']
+            ax.plot(n_clusters_range[: len(psi)], psi, 'o-', linewidth=2, label='Combined Psi')
+        elif 'psi_log' in results:
+            psi = results['psi_log']
+            ax.plot(n_clusters_range[:len(psi)], psi, 'o-', linewidth=2, label='Log-gap Psi')
+        
+        ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2, label=f'Optimal k={optimal}')
+        ax.set_xlabel('Number of Clusters')
+        ax.set_ylabel('Stability Score (Psi)')
+        ax.set_title('Partition Stability')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Plot 4: Multiple metrics comparison
+        ax = axes[1, 1]
+        if method in ['combined', 'all']: 
+            if 'psi_log' in results:
+                psi_log = results['psi_log']
+                psi_log_norm = (psi_log - psi_log.min()) / (psi_log.max() - psi_log.min() + 1e-10)
+                ax.plot(n_clusters_range[:len(psi_log_norm)], psi_log_norm, 
+                    'o-', label='Log-gap', alpha=0.7)
+            
+            if 'psi_relative' in results:
+                psi_rel = results['psi_relative']
+                psi_rel_norm = (psi_rel - psi_rel.min()) / (psi_rel.max() - psi_rel.min() + 1e-10)
+                ax.plot(n_clusters_range[:len(psi_rel_norm)], psi_rel_norm, 
+                    's-', label='Relative gap', alpha=0.7)
+            
+            ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2)
+            ax.set_xlabel('Number of Clusters')
+            ax.set_ylabel('Normalized Score')
+            ax.set_title('Comparison of Metrics')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
 
-        # Extend boundaries
-        delta_extended = np.concatenate([[delta[0] / 10], delta, [delta[-1] * 10]])
-        log_delta = np.log10(delta_extended + 1e-15)
 
-        # Compute differences
-        log_diff = log_delta[:-1] - log_delta[1:]
-
-        # Norm (first and last *real* values)
-        norm = log_delta[1] - log_delta[-2]
-        if abs(norm) < 1e-10:
-            norm = 1.0
-
-        N = 1.0 / norm
-        psi = N * log_diff
-
-        # Only real splits for psi (exclude extended ends)
-        psi = psi[1:-1]
-
-        # Index of optimal gap
-        optimal_n_clusters = np.argmax(psi) + 2
-
-        print(f"Optimal index: {optimal_n_clusters}, Psi value: \n{psi}")
-
-        return psi, optimal_n_clusters
+    ########################################################
 
     def detect_communities_at_scale(self, tau, method='hierarchical', n_clusters=None, return_linkage=False):
         # Compute distance matrix
@@ -1066,7 +1291,7 @@ class LRGCommunityDetector:
         # Identify metastable nodes
         threshold = 0.5
         metastable_indices = np.where(stability_scores < threshold)[0]
-        
+
         return metastable_indices, stability_scores, labels_matrix
 
 # Visualization functions
@@ -1108,7 +1333,7 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     ax.grid(True, alpha=0.5)
     
     ax2 = ax.twinx()
-    ln2 = ax2.semilogx(detector.tau_range, d_specific_heat, 'g--', label='Derivative of Susceptibility')
+    ln2 = ax2.semilogx(detector.tau_range[2:-2], d_specific_heat[2:-2], 'g--', label='Derivative of Susceptibility')
     ax2.axhline(0, color='gray', linestyle='--', alpha=1)
     ax2.set_ylabel(r'Derivative of Susceptibility', fontsize=font_size['axes_label'], color='green')
     ax2.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
@@ -1132,39 +1357,6 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     plt.tight_layout()
     plt.show()
     
-    # Network Visualization
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
-    if G is not None:
-        if pos is None:
-            pos = nx.spring_layout(G, seed=42)
-        # Color edges by weight when available; fallback to gray
-        edges = list(G.edges(data=True))
-        if edges:
-            edge_weights = [d.get('weight', 1.0) for (_, _, d) in edges]
-            w_min, w_max = min(edge_weights), max(edge_weights)
-            if np.isclose(w_min, w_max):
-                w_min, w_max = w_min - 1, w_max + 1
-            edge_cmap = plt.cm.get_cmap('coolwarm')
-            edge_colors = edge_weights
-            edge_vmin, edge_vmax = w_min, w_max
-        else:
-            edge_cmap = None
-            edge_colors = 'gray'
-            edge_vmin = edge_vmax = None
-        nx.draw_networkx(G, pos, ax=ax, node_color='lightblue', 
-                        node_size=500, with_labels=True, font_size=font_size['node_label'],
-                        edge_color=edge_colors, edge_cmap=edge_cmap,
-                        edge_vmin=edge_vmin, edge_vmax=edge_vmax, width=1)
-        ax.set_title(f'Network (N={len(G)})', fontsize=font_size['title'], pad=20)
-        ax.axis('off')
-    else:
-        ax.axis('off')
-        ax.text(0.5, 0.5, 'Network visualization\n(G not provided)', 
-                horizontalalignment='center', verticalalignment='center',
-                fontsize=font_size['title'])
-    plt.tight_layout()
-    plt.show()
-    
     print(f"\nFound {len(tau_peaks)} characteristic scales:")
     for i, tau in enumerate(tau_peaks):
         print(f"  τ*_{i+1} = {tau:.4g}")
@@ -1172,9 +1364,9 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     return tau_peaks
 
 # Plot dendrogram and community graph
-def plot_dendrogram(Z, G, pos, labels, tau=None, figsize=(12, 6)):
+def plot_dendrogram(Z, G, pos, labels, tau=None, score=None, figsize=(12, 6)):
     """
-    Plots hierarchical clustering dendrogram (log-scale distance) and the community graph.
+    Plots hierarchical clustering dendrogram (log-scale distance) and the community graph. 
     """
 
     font_size = get_font_sizes(figsize[0], figsize[1], "in")
@@ -1182,65 +1374,131 @@ def plot_dendrogram(Z, G, pos, labels, tau=None, figsize=(12, 6)):
     # Dendrogram
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     dn = dendrogram(Z, ax=ax, color_threshold=Z[-len(np.unique(labels))+1, 2])
+    
+    if score is not None:
+        ax.axhline(score, color='red', linestyle='--', label=r'$\Psi$ score')
+    # Get the leaf order from dendrogram
+    leaf_order = dn['leaves']
+    
+    # Get the actual node labels from graph G
+    # Convert G.nodes() to a list to allow indexing
+    node_list = list(G.nodes())
+    
+    # Map leaf order indices to actual node labels from G
+    node_labels = [str(node_list[i]) for i in leaf_order]
+    
     ax.set_xlabel('Node Index', fontsize=font_size['axes_label'])
     ax.set_ylabel('Distance (log scale)', fontsize=font_size['axes_label'])
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=font_size['ticks_label'])
+    
+    # Get x lim
+    xlim = ax.get_xlim()
+    ax.set_xticks(np.linspace(xlim[0], xlim[1], len(node_labels)))
+    ax.set_xticklabels(node_labels, fontsize=font_size['ticks_label'], rotation=45)
     ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
-    ax.set_title(f'Hierarchical Dendrogram' + (f'\nτ={tau:.3g}' if tau is not None else ''), fontsize=font_size['title'], pad=20)
+    ax.set_title(f'Hierarchical Dendrogram' + (f'\nτ={tau:.3g}' if tau is not None else ''), 
+                 fontsize=font_size['title'], pad=20)
     plt.tight_layout()
     plt.show()
 
 # Community graph
-def plot_communities(G, pos, labels, tau=None, figsize=(12, 6)):
+def plot_communities(G,
+                     pos,
+                     df_info,
+                     labels,
+                     tau=None,
+                     figsize=(12, 6),
+                     cmap='viridis',
+                     edge_vmin=-1,
+                     edge_vmax=1,
+                     edgescale=5
+                     ):
     """
     Docstring for plot_communities
     
     :param G: Description
-    :param pos: Description
+    : param pos: Description
+    :param info: Description
     :param labels: Description
-    :param tau: Description
-    :param figsize: Description
+    :param tau:  Description
+    :param figsize:  Description
     """
 
     font_size = get_font_sizes(figsize[0], figsize[1], "in")
+    # Add to info dataframe the community labels for nodes present in G
+    df_info['community'] = None  # Initialize with None for all rows
+    nodes = list(G.nodes())
+    df_info. loc[nodes, 'community'] = labels
 
-    # Community Graph
-    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    fig, ax = plot_network(
+        G, pos, 
+        metadata=df_info,
+        color_by='community',
+        edge_width_scale=edgescale,
+        figsize=(figsize[0], figsize[1]),
+        title=f"Network Plot - Communities (τ={tau:.3g})" if tau is not None else "Network Plot - Communities",
+        legend=False,
+        legend_font_size=font_size["legend"]//2,
+        colorbar_font_size=font_size["cbar_ticks"],
+        label_font_size=font_size["ticks_label"]//3,
+        title_font_size=font_size["title"],
+        cmap=cmap,
+        edge_vmin=edge_vmin,
+        edge_vmax=edge_vmax,
+        default_equal_node_size=True,
+        default_node_size=300,
+    )
     
-    cluster_cmap = pastelize_cmap(plt.cm.tab10, N=256, sat_scale=0.9, light_offset=0.2)
-    cluster_colors = cluster_cmap(labels / labels.max())
-    nx.draw_networkx(G, pos, ax=ax, node_color=cluster_colors, 
-                     node_size=500, with_labels=True, font_size=font_size['node_label'],
-                     edge_color='gray', width=1.5)
-    ax.set_title(f'Communities ({len(np.unique(labels))} clusters)' + (f'\nτ={tau:.3g}' if tau is not None else ''), 
-                fontsize=font_size['title'], pad=20)
-    ax.axis('off')
     plt.tight_layout()
     plt.show()
 
+
 # Plot metastable nodes
-def plot_metastable_nodes(G, pos, metastable_indices, stability_scores, figsize=(10, 8)):
+def plot_metastable_nodes(G,
+                          pos,
+                          df_info,
+                          metastable_indices,
+                          stability_scores, 
+                          figsize=(10, 8),
+                          cmap='viridis',
+                          edge_vmin=-1,
+                          edge_vmax=1,
+                          edgescale=5
+                          ):
     
     font_size = get_font_sizes(figsize[0], figsize[1], "in")
 
-    fig, ax = plt.subplots(figsize=figsize)
+    # Add metastability information to df_info
+    df_info['is_metastable'] = False
+    df_info['stability_score'] = None
+    
+    nodes = list(G.nodes())
+    
+    # Mark metastable nodes
+    metastable_nodes = [nodes[i] for i in metastable_indices if i < len(nodes)]
+    df_info.loc[metastable_nodes, 'is_metastable'] = True
+    
+    # Assign stability scores to all nodes in G
+    df_info.loc[nodes, 'stability_score'] = stability_scores[: len(nodes)]
+    
+    fig, ax = plot_network(
+        G, pos, 
+        metadata=df_info,
+        color_by='is_metastable',  # or 'stability_score' for continuous coloring
+        edge_width_scale=edgescale,
+        figsize=figsize,
+        title='Metastable Nodes (unstable across scales)',
+        legend=False,
+        legend_font_size=font_size["legend"]//2,
+        colorbar_font_size=font_size["cbar_ticks"],
+        label_font_size=font_size["ticks_label"]//3,
+        title_font_size=font_size["title"],
+        cmap=cmap,
+        edge_vmin=edge_vmin,
+        edge_vmax=edge_vmax,
+        default_equal_node_size=False,  # Allow variable sizes
+        default_node_size=300,
+    )
 
-    if pos is None:
-        pos = nx.spring_layout(G, seed=42)
-    
-    node_colors = ['red' if i in metastable_indices else 'lightblue' 
-                   for i in range(len(G))]
-    
-    node_sizes = [300 + 500 * (1 - stability_scores[i]) for i in range(len(G))]
-    
-    nx.draw_networkx(G, pos, ax=ax, node_color=node_colors, 
-                     node_size=node_sizes, with_labels=True, font_size=font_size['node_label'],
-                     edge_color='gray', width=1.5, alpha=0.7)
-    
-    ax.set_title('Metastable Nodes (red = unstable across scales)', 
-                fontsize=font_size['title'])
-    ax.axis('off')
-    
     plt.tight_layout()
     plt.show()
 

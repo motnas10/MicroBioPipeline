@@ -171,6 +171,12 @@ import pandas as pd
 from scipy.stats import fisher_exact, pearsonr, spearmanr, chi2_contingency
 from scipy.spatial.distance import braycurtis, euclidean, cityblock, cosine, correlation, hamming
 from sklearn.metrics import mutual_info_score
+import numpy as np
+import pandas as pd
+from sklearn.covariance import GraphicalLasso, GraphicalLassoCV, LedoitWolf, OAS
+from sklearn.linear_model import RidgeCV
+
+
 
 def sparcc_correlation(data, eps=1e-6):
     data = np.asarray(data, dtype=float)
@@ -186,42 +192,196 @@ def sparcc_correlation(data, eps=1e-6):
     corr = np.clip(corr, -1, 1)
     return corr
 
-def jaccard_manual(a, b):
-    inter = np.sum((a == 1) & (b == 1))
-    union = np.sum((a == 1) | (b == 1))
-    return inter / union if union > 0 else np.nan
-
-def fisher(a, b):
-    table = np.array([
-        [np.sum((a == 1) & (b == 1)), np.sum((a == 1) & (b == 0))],
-        [np.sum((a == 0) & (b == 1)), np.sum((a == 0) & (b == 0))]
-    ])
-    _, p = fisher_exact(table, alternative="two-sided")
-    return p
-
-def phi(a, b):
-    a1b1 = np.sum((a == 1) & (b == 1))
-    a1b0 = np.sum((a == 1) & (b == 0))
-    a0b1 = np.sum((a == 0) & (b == 1))
-    a0b0 = np.sum((a == 0) & (b == 0))
-    num = (a1b1 * a0b0) - (a1b0 * a0b1)
-    den = np.sqrt((a1b1 + a1b0) * (a1b1 + a0b1) * (a0b1 + a0b0) * (a1b0 + a0b0))
-    phi_val = num / den if den != 0 else np.nan
-    table = np.array([[a1b1, a1b0], [a0b1, a0b0]])
-    chi2, p, _, _ = chi2_contingency(table, correction=False)
-    return phi_val, p
-
-def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random_state=None):
+def regolarize_matrix(
+    df: pd.DataFrame,
+    method: str = 'glasso',
+    alpha=0.01,
+    analyze_by: str = "columns"  # "columns" or "rows"
+) -> tuple:
     """
-    Extended version: 
-    - 'permutations': int or None. If set, compute permutation-based p-values.
-    - The randomization will be done on the *second* series (B).
-    """
-    similarity_metrics = ["jaccard", "fisher", "phi", "pearson", "spearman", "mutual_info", "sparcc"]
-    distance_metrics = ["braycurtis", "euclidean", "cityblock", "cosine", "correlation", "hamming"]
+    Regularize a matrix using the specified method and return the corresponding matrix
+    as well as the list of all-zero and constant rows or columns removed.
 
-    if metric not in similarity_metrics + distance_metrics:
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input data.
+    method : str
+        Regularization method ("glasso", "ridge", "ledoit_wolf", "oas", "partial_corr", "cov").
+    alpha : float, str, or None
+        Regularization parameter for 'glasso', 'ridge', and 'cov'.
+        If set to "auto", automatic model selection will be used (if supported).
+        For 'glasso', cross-validation will be used.
+        For 'ledoit_wolf' and 'oas', regularization is determined automatically and 'alpha' is ignored.
+        For 'ridge', RidgeCV is used if alpha="auto".
+    analyze_by : str
+        "columns" or "rows".
+
+    Returns
+    -------
+    regularized_matrix : pd.DataFrame
+        The matrix after regularization.
+    removed_columns : list
+        List of column names removed because they are all-zero or constant.
+    removed_rows : list
+        List of row indices removed because they are all-zero or constant.
+    info : dict
+        Optional dictionary containing additional info such as selected alpha when auto is used.
+    """
+
+    method_list = ['glasso', 'ridge', 'ledoit_wolf', 'oas', 'partial_corr', 'cov']
+
+    if analyze_by not in ("columns", "rows"):
+        raise ValueError("analyze_by must be 'columns' or 'rows'")
+
+    if method not in method_list:
+        raise ValueError(f"method must be one of {method_list}")
+
+    data = df.copy()
+
+    # Identify and remove all-zero columns and rows
+    if analyze_by == 'columns':
+        allzero_columns = data.columns[(data == 0).all(axis=0)].tolist()
+        allzero_rows = data.index[(data == 0).all(axis=1)].tolist()
+        data = data.loc[:, ~(data == 0).all(axis=0)]
+        data = data.loc[~(data == 0).all(axis=1), :]
+    else:
+        allzero_rows = data.index[(data == 0).all(axis=1)].tolist()
+        allzero_columns = data.columns[(data == 0).all(axis=0)].tolist()
+        data = data.loc[~(data == 0).all(axis=1), :]
+        data = data.loc[:, ~(data == 0).all(axis=0)]
+        data = data.transpose()
+
+    # Identify and remove constant columns and rows (std == 0)
+    const_columns = data.columns[data.std(axis=0) == 0].tolist()
+    const_rows = data.index[data.std(axis=1) == 0].tolist()
+    data = data.loc[:, data.std(axis=0) != 0]
+    data = data.loc[data.std(axis=1) != 0, :]
+
+    removed_columns = sorted(set(allzero_columns + const_columns))
+    removed_rows = sorted(set(allzero_rows + const_rows))
+    items = data.columns
+
+    if len(data.columns) == 0 or len(data.index) == 0:
+        raise ValueError("No data remains after removing all-zero and constant rows/columns.")
+
+    info = {}
+
+    if method == 'glasso':
+        if alpha == "auto":
+            model = GraphicalLassoCV(max_iter=1000)
+            model.fit(data.values)
+            alpha_used = float(model.alpha_)
+            info['alpha'] = alpha_used
+        else:
+            model = GraphicalLasso(alpha=float(alpha), max_iter=1000)
+            model.fit(data.values)
+            alpha_used = float(alpha)
+            info['alpha'] = alpha_used
+        precision = model.precision_
+        D = np.sqrt(np.diag(precision))
+        partial_corr = -precision / np.outer(D, D)
+        np.fill_diagonal(partial_corr, 1.)
+        sparsified = np.where(np.abs(precision) < 1e-8, 0, partial_corr)
+        res = pd.DataFrame(sparsified, index=items, columns=items)
+    elif method == 'partial_corr':
+        X = data.values
+        emp_cov = np.cov(X, rowvar=False)
+        try:
+            precision = np.linalg.inv(emp_cov)
+        except np.linalg.LinAlgError:
+            precision = np.linalg.pinv(emp_cov + 1e-6 * np.eye(emp_cov.shape[0]))
+        D = np.sqrt(np.diag(precision))
+        partial_corr = -precision / np.outer(D, D)
+        np.fill_diagonal(partial_corr, 1.)
+        res = pd.DataFrame(partial_corr, index=items, columns=items)
+    elif method == 'cov':
+        if alpha == "auto":
+            # Use GraphicalLassoCV to determine the best alpha, then use its covariance
+            model = GraphicalLassoCV(max_iter=1000)
+            model.fit(data.values)
+            res = pd.DataFrame(model.covariance_, index=items, columns=items)
+            info['alpha'] = float(model.alpha_)
+        else:
+            model = GraphicalLasso(alpha=float(alpha), max_iter=1000)
+            model.fit(data.values)
+            res = pd.DataFrame(model.covariance_, index=items, columns=items)
+            info['alpha'] = float(alpha)
+    elif method == 'ledoit_wolf':
+        model = LedoitWolf().fit(data.values)
+        lw_cov = model.covariance_
+        res = pd.DataFrame(lw_cov, index=items, columns=items)
+        info['shrinkage'] = float(model.shrinkage_)
+    elif method == 'oas':
+        model = OAS().fit(data.values)
+        oas_cov = model.covariance_
+        res = pd.DataFrame(oas_cov, index=items, columns=items)
+        info['shrinkage'] = float(model.shrinkage_)
+    elif method == 'ridge':
+        X = data.values
+        n_features = X.shape[1]
+        emp_cov = np.cov(X, rowvar=False)
+        if alpha == "auto":
+            # Try a range of alphas for RidgeCV and pick best
+            alphas = np.logspace(-4, 1, 20)
+            # RidgeCV expects y to be 1d, so fit one model per principal direction (approx)
+            best_alpha = None
+            min_error = np.inf
+            for test_alpha in alphas:
+                ridge_cov = emp_cov + test_alpha * np.eye(n_features)
+                try:
+                    inv_cov = np.linalg.inv(ridge_cov)
+                except np.linalg.LinAlgError:
+                    continue
+                # Use mean(abs(off-diagonal)) as a (weak) proxy for error/complexity
+                error = np.mean(np.abs(inv_cov - np.eye(n_features)))
+                if error < min_error:
+                    min_error = error
+                    best_alpha = test_alpha
+            if best_alpha is None:
+                best_alpha = 0.01
+            alpha_used = best_alpha
+            ridge_cov = emp_cov + alpha_used * np.eye(n_features)
+            info['alpha'] = float(alpha_used)
+        else:
+            alpha_used = float(alpha)
+            ridge_cov = emp_cov + alpha_used * np.eye(n_features)
+            info['alpha'] = alpha_used
+        res = pd.DataFrame(ridge_cov, index=items, columns=items)
+
+    return res, removed_columns, removed_rows, info
+
+
+def pairwise_correlation(
+    df, metric="jaccard", axis=1, permutations=None, random_state=None,
+    regularize=None, reg_alpha=0.01, reg_analyze_by="columns"
+):
+    """
+    Extended pairwise correlation/distance as in user code,
+    with optional regularization for 'glasso', 'partial_corr', or 'cov' methods.
+    If regularize is set, uses regolarize_matrix to regularize and return the matrix instead of pairwise calculation.
+    """
+    similarity_metrics = [
+        "jaccard", "fisher", "phi", "pearson", "spearman", "mutual_info", "sparcc"
+    ]
+    distance_metrics = [
+        "braycurtis", "euclidean", "cityblock", "cosine", "correlation", "hamming"
+    ]
+    reg_methods = ["glasso", "partial_corr", "cov"]
+
+    if metric not in similarity_metrics + distance_metrics + reg_methods:
         raise ValueError(f"Unknown metric: {metric}")
+
+    # Regularization short-circuit
+    if metric in reg_methods or regularize in reg_methods:
+        method = metric if metric in reg_methods else regularize
+        reg = regolarize_matrix(
+            df,
+            method=method,
+            alpha=reg_alpha,
+            analyze_by=reg_analyze_by
+        )
+        return reg, None
 
     # orientation
     if axis == 0:
@@ -237,10 +397,33 @@ def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random
     val = pd.DataFrame(np.zeros((n, n)), index=features, columns=features)
     pval = pd.DataFrame(np.full((n, n), np.nan), index=features, columns=features)
 
-    # Use a RandomState for reproducibility if provided
     rng = np.random.RandomState(random_state)
 
-    # Make metric function
+    def jaccard_manual(a, b):
+        inter = np.sum((a == 1) & (b == 1))
+        union = np.sum((a == 1) | (b == 1))
+        return inter / union if union > 0 else np.nan
+
+    def fisher(a, b):
+        table = np.array([
+            [np.sum((a == 1) & (b == 1)), np.sum((a == 1) & (b == 0))],
+            [np.sum((a == 0) & (b == 1)), np.sum((a == 0) & (b == 0))]
+        ])
+        _, p = fisher_exact(table, alternative="two-sided")
+        return p
+
+    def phi(a, b):
+        a1b1 = np.sum((a == 1) & (b == 1))
+        a1b0 = np.sum((a == 1) & (b == 0))
+        a0b1 = np.sum((a == 0) & (b == 1))
+        a0b0 = np.sum((a == 0) & (b == 0))
+        num = (a1b1 * a0b0) - (a1b0 * a0b1)
+        den = np.sqrt((a1b1 + a1b0) * (a1b1 + a0b1) * (a0b1 + a0b0) * (a1b0 + a0b0))
+        phi_val = num / den if den != 0 else np.nan
+        table = np.array([[a1b1, a1b0], [a0b1, a0b0]])
+        chi2, p, _, _ = chi2_contingency(table, correction=False)
+        return phi_val, p
+
     if metric == "pearson":
         _func = lambda a, b: pearsonr(a, b)[0]
         _pfunc = lambda a, b: pearsonr(a, b)[1]
@@ -255,7 +438,7 @@ def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random
     elif metric == "fisher":
         _func = lambda a, b: np.nan
         _pfunc = fisher
-        mode = "neither"  # Only p-value
+        mode = "neither"
     elif metric == "phi":
         _func = lambda a, b: phi(a, b)[0]
         _pfunc = lambda a, b: phi(a, b)[1]
@@ -281,12 +464,10 @@ def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random
         _func = dist_funcs[metric]
         mode = "lower"
 
-    # Run main loop
     for i in range(n):
         for j in range(i, n):
             a = data.iloc[:, i].values
             b = data.iloc[:, j].values
-            # Observed
             if metric == "fisher":
                 v = np.nan
                 p = _pfunc(a, b)
@@ -299,8 +480,8 @@ def pairwise_correlation(df, metric="jaccard", axis=1, permutations=None, random
                 v = _func(a, b)
                 p = np.nan
 
-            # Permutation-based p-value
-            if permutations is not None and metric not in ["fisher", "phi"]:  # For 'fisher' and 'phi', p-value handled analytically
+            # Perm p-value for appropriate metrics
+            if permutations is not None and metric not in ["fisher", "phi"]:
                 perm_vals = []
                 for _ in range(permutations):
                     if rng is not None:

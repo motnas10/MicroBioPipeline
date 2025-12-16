@@ -674,43 +674,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.covariance import GraphicalLassoCV, LedoitWolf
 import networkx as nx
 
-def compute_partial_corr_robust(X, feature_names=None, alpha_range=(1e-2, 1.0), n_alphas=10):
-    if isinstance(X, pd.DataFrame):
-        feature_names = X.columns if feature_names is None else feature_names
-        X = X.values
-    elif feature_names is None:
-        feature_names = [f"feature_{i}" for i in range(X.shape[1])]
 
-    # Remove constant columns
-    X_std = X.std(axis=0)
-    nonconstant_cols = np.where(X_std > 0)[0]
-    X = X[:, nonconstant_cols]
-    feature_names = [feature_names[i] for i in nonconstant_cols]
 
-    scaler = StandardScaler()
-    X_standardized = scaler.fit_transform(X)
-
-    try:
-        model = GraphicalLassoCV(alphas=np.linspace(alpha_range[0], alpha_range[1], n_alphas), assume_centered=False)
-        model.fit(X_standardized)
-        C_mu, J_mu = model.covariance_, model.precision_
-        method = "glasso"
-        alpha_L = model.alpha_
-    except FloatingPointError:
-        model = LedoitWolf()
-        model.fit(X_standardized)
-        C_mu, J_mu = model.covariance_, model.precision_
-        method = "ledoitwolf"
-        alpha_L = None
-
-    d = np.sqrt(np.diag(J_mu))
-    tilde_J = J_mu / np.outer(d, d)
-    np.fill_diagonal(tilde_J, 1)
-
-    tilde_J_df = pd.DataFrame(tilde_J, index=feature_names, columns=feature_names)
-    return tilde_J_df, alpha_L, C_mu, J_mu, method
-
-def fully_connected_thresholded_matrix(tilde_J_df):
+def percolation_threshold(tilde_J_df):
     """
     Increases threshold for absolute edge weight until the graph just starts to disconnect.
     Returns the largest threshold matrix that is still fully connected.
