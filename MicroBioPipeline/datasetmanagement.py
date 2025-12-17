@@ -676,13 +676,13 @@ import networkx as nx
 
 
 
-def percolation_threshold(tilde_J_df):
+def percolation_threshold(corr_matrix):
     """
     Increases threshold for absolute edge weight until the graph just starts to disconnect.
     Returns the largest threshold matrix that is still fully connected.
     """
-    abs_weights = np.abs(tilde_J_df.values)
-    n_nodes = tilde_J_df.shape[0]
+    abs_weights = np.abs(corr_matrix.values)
+    n_nodes = corr_matrix.shape[0]
     abs_weights[range(n_nodes), range(n_nodes)] = 0 # zero out diagonal
 
     # Get all unique non-diagonal weights (upper triangle)
@@ -690,15 +690,15 @@ def percolation_threshold(tilde_J_df):
     thresholds = np.unique(np.sort(weights)) # ascending order
 
     # Iterate over thresholds, keep lowest ones first
-    final_matrix = tilde_J_df.values.copy()
+    final_matrix = corr_matrix.values.copy()
     final_thresh = 0
     for thresh in thresholds:
         mask = abs_weights >= thresh
-        temp_matrix = tilde_J_df.values * mask
+        temp_matrix = corr_matrix.values * mask
 
         # Build graph
         G = nx.Graph()
-        nodes = tilde_J_df.index.tolist()
+        nodes = corr_matrix.index.tolist()
         G.add_nodes_from(nodes)
         for i in range(n_nodes):
             for j in range(i+1, n_nodes):
@@ -711,6 +711,6 @@ def percolation_threshold(tilde_J_df):
         else: # disconnected, stop at previous threshold
             break
 
-    thresholded_df = pd.DataFrame(final_matrix, index=tilde_J_df.index, columns=tilde_J_df.columns)
+    thresholded_df = pd.DataFrame(final_matrix, index=corr_matrix.index, columns=corr_matrix.columns)
     return final_thresh, thresholded_df
 

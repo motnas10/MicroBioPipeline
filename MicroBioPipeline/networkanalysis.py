@@ -587,6 +587,7 @@ class NetworkPlotter:
         show: bool = True,
         default_equal_node_size: bool = True,
         default_node_size: float = 600,
+        filename: Optional[str] = None
     ) -> Tuple[plt.Figure, plt.Axes]:
         """
         Plot network with customizable styling.
@@ -653,7 +654,7 @@ class NetworkPlotter:
         
         # Add edge colorbar
         edge_sm = self._create_edge_scalar_mappable(cmap, edge_vmin, edge_vmax)
-        cbar = fig.colorbar(edge_sm, ax=ax)
+        cbar = fig.colorbar(edge_sm, ax=ax, pad=0.1)
         cbar.set_label(f"{self.metric.capitalize()}", fontsize=colorbar_font_size)
         cbar.ax.tick_params(labelsize=colorbar_font_size)
         
@@ -678,6 +679,10 @@ class NetworkPlotter:
         if show:
             plt.tight_layout()
             plt.show()
+        
+        if filename is not None:
+            fig.tight_layout()
+            fig.savefig(filename, bbox_inches='tight', dpi=600, transparent=False)
         
         return fig, ax
     
@@ -1457,7 +1462,7 @@ def plot_metastable_nodes(G,
                           pos,
                           df_info,
                           metastable_indices,
-                          stability_scores, 
+                          stability_scores,
                           figsize=(10, 8),
                           cmap='viridis',
                           edge_vmin=-1,
