@@ -1167,7 +1167,7 @@ class LRGCommunityDetector:
         ax.set_title('Dendrogram with Optimal Cut', fontsize=font_size['title'], pad=20)
         ax.set_xlabel('Samples', fontsize=font_size['label'])
         ax.set_ylabel('Distance', fontsize=font_size['label'])
-        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_labels'])
         ax.legend(fontsize=font_size['legend'])
         
         # Plot 2: Merge distances
@@ -1178,7 +1178,7 @@ class LRGCommunityDetector:
         ax.set_xlabel('Number of Clusters', fontsize=font_size['label'])
         ax.set_ylabel('Merge Distance (Height)', fontsize=font_size['label'])
         ax.set_title('Linkage Distances', fontsize=font_size['title'], pad=20)
-        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_labels'])
         ax.grid(True, alpha=0.3)
         
         # Plot 3: Stability metrics
@@ -1194,7 +1194,7 @@ class LRGCommunityDetector:
         ax.set_xlabel('Number of Clusters', fontsize=font_size['label'])
         ax.set_ylabel('Stability Score (Psi)', fontsize=font_size['label'])
         ax.set_title('Partition Stability', fontsize=font_size['title'], pad=20)
-        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_labels'])
         ax.legend(fontsize=font_size['legend'])
         ax.grid(True, alpha=0.3)
         
@@ -1218,7 +1218,7 @@ class LRGCommunityDetector:
             ax.set_ylabel('Normalized Score', fontsize=font_size['label'])
             ax.set_title('Comparison of Metrics', fontsize=font_size['title'], pad=20)
             ax.legend(fontsize=font_size['legend'])
-            ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+            ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_labels'])
             ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
