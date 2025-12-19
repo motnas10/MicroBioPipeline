@@ -1622,4 +1622,20 @@ def plot_sankey_diagram(labels_df,
     )
 
     if filename:
-        fig.write_image(filename, scale=2)
+        try:
+            # Ensure proper file extension
+            if not any(filename.endswith(ext) for ext in ['.png', '.jpg', '.svg', '.pdf']):
+                filename += '.png'
+            
+            fig.write_image(filename, scale=2)
+            print(f"✓ Sankey diagram saved to {filename}")
+        except ValueError as e:
+            if "kaleido" in str(e).lower() or "image export" in str(e).lower():
+                print("Error: kaleido not installed. Installing now...")
+                print("Run: pip install kaleido")
+                # Fallback to HTML
+                html_file = filename.rsplit('.', 1)[0] + '.html'
+                fig.write_html(html_file)
+                print(f"✓ Saved as interactive HTML instead:  {html_file}")
+            else:
+                raise
