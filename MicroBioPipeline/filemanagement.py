@@ -41,6 +41,26 @@ def pval_to_symbol(p):
         return 'ns'
     
 # --------------------------------------------------------------------------------------------------------------
+# General data loader
+def load_data(file_path, filetype="excel", **kwargs):
+    """
+    General loader for excel (single/multi-sheet), csv, txt.
+    Returns dict of {sheet_or_file_name: DataFrame}
+    """
+    if filetype == "excel":
+        dfs = pd.read_excel(file_path, sheet_name=None, index_col=0, header=0)  # all sheets
+        return dfs
+    elif filetype == "csv":
+        df = pd.read_csv(file_path, index_col=0, header=0, **kwargs)
+        return {"csv": df}
+    elif filetype == "txt":
+        df = pd.read_csv(file_path, delimiter=kwargs.get("delimiter", "\t"), index_col=0, header=0)
+        return {"txt": df}
+    else:
+        raise ValueError("Unsupported file type")
+
+    
+# --------------------------------------------------------------------------------------------------------------
 # DataFrame filtering by multiple features
 import numpy as np
 import pandas as pd

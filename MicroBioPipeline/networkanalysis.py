@@ -1136,15 +1136,19 @@ class LRGCommunityDetector:
         return results, optimal_n_clusters
 
 
-    def visualize_stability(self, Z, results, method='combined'):
+    def visualize_stability(self,
+                            Z,
+                            results,
+                            method='combined',
+                            figsize=(14, 10),
+                            filename=None):
         """
         Visualize the partition stability metrics.
-        """
-        import matplotlib.pyplot as plt
-        
+        """        
         n_clusters_range = np.arange(2, len(Z[: , 2]) + 2)
-        
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+        font_size = get_font_sizes(figsize[0], figsize[1], "in")
+        fig, axes = plt.subplots(2, 2, figsize=figsize)
         
         # Plot 1: Dendrogram with cut line
         from scipy.cluster.hierarchy import dendrogram
@@ -1159,18 +1163,22 @@ class LRGCommunityDetector:
             threshold = Z[-(optimal-1), 2]
         
         ax.axhline(y=threshold, color='r', linestyle='--', linewidth=2, 
-                label=f'Cut at k={optimal}')
-        ax.set_title('Dendrogram with Optimal Cut')
-        ax.legend()
+                   label=f'Cut at k={optimal}')
+        ax.set_title('Dendrogram with Optimal Cut', fontsize=font_size['title'], pad=20)
+        ax.set_xlabel('Samples', fontsize=font_size['label'])
+        ax.set_ylabel('Distance', fontsize=font_size['label'])
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+        ax.legend(fontsize=font_size['legend'])
         
         # Plot 2: Merge distances
         ax = axes[0, 1]
         delta = np.sort(Z[:, 2])[::-1]
         ax.plot(n_clusters_range, delta, 'o-', linewidth=2)
         ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2)
-        ax.set_xlabel('Number of Clusters')
-        ax.set_ylabel('Merge Distance (Height)')
-        ax.set_title('Linkage Distances')
+        ax.set_xlabel('Number of Clusters', fontsize=font_size['label'])
+        ax.set_ylabel('Merge Distance (Height)', fontsize=font_size['label'])
+        ax.set_title('Linkage Distances', fontsize=font_size['title'], pad=20)
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
         ax.grid(True, alpha=0.3)
         
         # Plot 3: Stability metrics
@@ -1183,10 +1191,11 @@ class LRGCommunityDetector:
             ax.plot(n_clusters_range[:len(psi)], psi, 'o-', linewidth=2, label='Log-gap Psi')
         
         ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2, label=f'Optimal k={optimal}')
-        ax.set_xlabel('Number of Clusters')
-        ax.set_ylabel('Stability Score (Psi)')
-        ax.set_title('Partition Stability')
-        ax.legend()
+        ax.set_xlabel('Number of Clusters', fontsize=font_size['label'])
+        ax.set_ylabel('Stability Score (Psi)', fontsize=font_size['label'])
+        ax.set_title('Partition Stability', fontsize=font_size['title'], pad=20)
+        ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
+        ax.legend(fontsize=font_size['legend'])
         ax.grid(True, alpha=0.3)
         
         # Plot 4: Multiple metrics comparison
@@ -1205,15 +1214,16 @@ class LRGCommunityDetector:
                     's-', label='Relative gap', alpha=0.7)
             
             ax.axvline(x=optimal, color='r', linestyle='--', linewidth=2)
-            ax.set_xlabel('Number of Clusters')
-            ax.set_ylabel('Normalized Score')
-            ax.set_title('Comparison of Metrics')
-            ax.legend()
+            ax.set_xlabel('Number of Clusters', fontsize=font_size['label'])
+            ax.set_ylabel('Normalized Score', fontsize=font_size['label'])
+            ax.set_title('Comparison of Metrics', fontsize=font_size['title'], pad=20)
+            ax.legend(fontsize=font_size['legend'])
+            ax.tick_params(axis='both', which='major', labelsize=font_size['ticks'])
             ax.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        plt.show()
-
+        if filename is not None:
+            fig.savefig(filename, bbox_inches='tight', dpi=600, transparent=False)
 
     ########################################################
 
@@ -1300,7 +1310,11 @@ class LRGCommunityDetector:
         return metastable_indices, stability_scores, labels_matrix
 
 # Visualization functions
-def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
+def plot_lrg_analysis(detector,
+                      pos=None,
+                      G=None,
+                      figsize=(15, 10),
+                      filenmame=None):
     """Plot LRG analysis results including entropy, susceptibility, spectrum, and network."""
     # Ensure susceptibility is computed
     if detector.susceptibility is None:
@@ -1324,8 +1338,9 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     ax.set_title('Network Entropy', fontsize=font_size['title'], pad=20)
     ax.grid(True, alpha=0.5)
     plt.tight_layout()
-    plt.show()
-    
+    if filenmame is not None:
+        fig.savefig('entropy_' + filenmame, bbox_inches='tight', dpi=600, transparent=False)    
+
     # Susceptibility & Specific Heat
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     ln1 = ax.semilogx(detector.tau_range, detector.susceptibility, 'r-', label='Susceptibility')
@@ -1358,8 +1373,9 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     ax.legend(handles1, labels1, loc='best', fontsize=font_size['legend'])
     
     plt.tight_layout()
-    plt.show()
-    
+    if filenmame is not None:
+        fig.savefig('susceptibility_' + filenmame, bbox_inches='tight', dpi=600, transparent=False)
+
     # Laplacian Spectrum
     fig, ax = plt.subplots(1, 1, figsize=figsize)
     # ax.semilogy(detector.eigenvalues, 'o-', markersize=8, alpha=0.8)
@@ -1372,7 +1388,8 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
                  fontsize=font_size['title'], pad=20)
     ax.grid(True, alpha=0.5)
     plt.tight_layout()
-    plt.show()
+    if filenmame is not None:
+        fig.savefig('spectrum_' + filenmame, bbox_inches='tight', dpi=600, transparent=False)
     
     print(f"\nFound {len(tau_peaks)} characteristic scales:")
     for i, tau in enumerate(tau_peaks):
@@ -1381,7 +1398,14 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     return tau_peaks
 
 # Plot dendrogram and community graph
-def plot_dendrogram(Z, G, pos, labels, tau=None, score=None, figsize=(12, 6)):
+def plot_dendrogram(Z,
+                    G,
+                    pos,
+                    labels, 
+                    tau=None,
+                    score=None,
+                    figsize=(12, 6),
+                    filename=None):
     """
     Plots hierarchical clustering dendrogram (log-scale distance) and the community graph. 
     """
@@ -1414,8 +1438,11 @@ def plot_dendrogram(Z, G, pos, labels, tau=None, score=None, figsize=(12, 6)):
     ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
     ax.set_title(f'Hierarchical Dendrogram' + (f'\nτ={tau:.3g}' if tau is not None else ''), 
                  fontsize=font_size['title'], pad=20)
-    plt.tight_layout()
-    plt.show()
+    fig.tight_layout()
+    if filename is not None:
+        plt.savefig(filename, dpi=600, bbox_inches='tight', transparent=False)
+
+
 
 # Community graph
 def plot_communities(G,
@@ -1427,7 +1454,8 @@ def plot_communities(G,
                      cmap='viridis',
                      edge_vmin=-1,
                      edge_vmax=1,
-                     edgescale=5
+                     edgescale=5,
+                     filename=None
                      ):
     """
     Docstring for plot_communities
@@ -1463,10 +1491,8 @@ def plot_communities(G,
         edge_vmax=edge_vmax,
         default_equal_node_size=True,
         default_node_size=300,
+        filename=filename
     )
-    
-    plt.tight_layout()
-    plt.show()
 
 
 # Plot metastable nodes
@@ -1479,7 +1505,8 @@ def plot_metastable_nodes(G,
                           cmap='viridis',
                           edge_vmin=-1,
                           edge_vmax=1,
-                          edgescale=5
+                          edgescale=5,
+                          filename=None
                           ):
     
     font_size = get_font_sizes(figsize[0], figsize[1], "in")
@@ -1514,13 +1541,13 @@ def plot_metastable_nodes(G,
         edge_vmax=edge_vmax,
         default_equal_node_size=False,  # Allow variable sizes
         default_node_size=300,
+        filename=filename
     )
 
-    plt.tight_layout()
-    plt.show()
-
 # Plot Sankey diagram for community evolution
-def plot_sankey_diagram(labels_df, tau_values):    
+def plot_sankey_diagram(labels_df,
+                        tau_values,
+                        filename=None):    
     N, n_scales = labels_df.shape
 
     print(labels_df)
@@ -1593,5 +1620,6 @@ def plot_sankey_diagram(labels_df, tau_values):
         height=h,
         width=w,
     )
-    
-    fig.show()
+
+    if filename:
+        fig.write_image(filename, scale=2)
