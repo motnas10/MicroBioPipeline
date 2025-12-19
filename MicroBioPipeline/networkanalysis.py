@@ -1334,17 +1334,29 @@ def plot_lrg_analysis(detector, pos=None, G=None, figsize=(15, 10)):
     ax.set_xlabel(r'Diffusion time $\tau$', fontsize=font_size['axes_label'])
     ax.set_ylabel(r'Susceptibility $C(\tau)$', fontsize=font_size['axes_label'], color='red')
     ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
-    ax.set_title('Entropic Susceptibility and Specific Heat', fontsize=font_size['title'], pad=20)
+    ax.set_title('Entropy and Susceptibility', fontsize=font_size['title'], pad=20)
     ax.grid(True, alpha=0.5)
+
+    for tau_peak in tau_peaks:
+        ax.axvline(x=tau_peak, color='gray', linestyle='--', alpha=0.7)
     
-    ax2 = ax.twinx()
-    ln2 = ax2.semilogx(detector.tau_range[2:-2], d_specific_heat[2:-2], 'g--', label='Derivative of Susceptibility')
-    ax2.axhline(0, color='gray', linestyle='--', alpha=1)
-    ax2.set_ylabel(r'Derivative of Susceptibility', fontsize=font_size['axes_label'], color='green')
-    ax2.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    # ax2 = ax.twinx()
+    # ln2 = ax2.semilogx(detector.tau_range[2:-2], d_specific_heat[2:-2], 'g--', label='Derivative of Susceptibility')
+    # ax2.axhline(0, color='gray', linestyle='--', alpha=1)
+    # ax2.set_ylabel(r'Derivative of Susceptibility', fontsize=font_size['axes_label'], color='green')
+    # ax2.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
+    # handles1, labels1 = ax.get_legend_handles_labels()
+    # handles2, labels2 = ax2.get_legend_handles_labels()
+    # ax2.legend(handles1+handles2, labels1+labels2, loc='best', fontsize=font_size['legend'])
+
+    ln2 = ax.semilogx(detector.tau_range, detector.entropy, 'b--', label='Entropy S($\\tau$)')
+    ax.axhline(0, color='gray', linestyle='--', alpha=1)
+    ax.set_ylabel(r'Entropy', fontsize=font_size['axes_label'], color='blue')
+    ax.tick_params(axis='both', which='major', labelsize=font_size['ticks_label'])
     handles1, labels1 = ax.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(handles1+handles2, labels1+labels2, loc='best', fontsize=font_size['legend'])
+    # handles2, labels2 = ax.get_legend_handles_labels()
+    ax.legend(handles1, labels1, loc='best', fontsize=font_size['legend'])
+    
     plt.tight_layout()
     plt.show()
     
