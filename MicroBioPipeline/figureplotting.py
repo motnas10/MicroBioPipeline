@@ -15,6 +15,7 @@ def plot_dim_reduction(
     title="Dimensionality Reduction",
     font_sizes=None,
     legend_title=None,
+    color_palette=None,  # NEW: Optional dict mapping category values to colors
     show_loadings=False,
     loadings_df=None,
     loadings_scale=1,
@@ -29,6 +30,7 @@ def plot_dim_reduction(
     ellipse_std=1,
     ellipse_alpha=0.2,
     filepath=None,
+    show=True,
 ):
     """
     General-purpose dimensionality reduction plot for PCA/PCoA/tSNE/UMAP/etc.
@@ -37,17 +39,19 @@ def plot_dim_reduction(
     - dr_method: 'PCA', 'PCoA', 'tSNE', 'UMAP', or 'auto' (tries to infer from col names, for axis labeling)
     - coords_cols: list of columns to use for coordinates; must be length 2, e.g. ['PC1','PC2'] or ['UMAP1','UMAP2']
     - explained: list of explained variances for axes (optional, mainly for PCA/PCoA)
+    - color_palette: dict mapping category values to colors (e.g.  {'GroupA': '#FF0000', 'GroupB': '#0000FF'})
+                     If None, uses default seaborn 'Set2' palette
     """
-    if coords_cols is None:
-        # Try to infer coordinates: prefer first two columns matching known DR axes
+    if coords_cols is None: 
+        # Try to infer coordinates:  prefer first two columns matching known DR axes
         candidates = ['PC1','PC2','PCoA1','PCoA2','Dim1','Dim2','UMAP1','UMAP2','tSNE1','tSNE2']
-        found = [c for c in candidates if c in coords_df.columns]
+        found = [c for c in candidates if c in coords_df. columns]
         if len(found) >= 2:
             coords_cols = found[:2]
-        else:
-            coords_cols = coords_df.columns[:2].tolist()
+        else: 
+            coords_cols = coords_df.columns[: 2].tolist()
     x, y = coords_cols
-    if dr_method == "auto":
+    if dr_method == "auto": 
         # Pick first coordinate name prefix if available
         prefixes = ['PC', 'PCoA', 'UMAP', 'tSNE', 'Dim']
         dr_method = next((p for p in prefixes if x.startswith(p)), "DimRed")
@@ -66,16 +70,29 @@ def plot_dim_reduction(
     # Style and color mappings
     marker_symbols = ['o', 'X', '^', 's', 'D', 'v', 'P', '*', '<', '>', '8', 'p', 'H', 'h', '+', 'x']
     style_map = {}
-    if style_col is not None:
+    if style_col is not None: 
         unique_styles = coords_df[style_col].dropna().unique()
         style_map = {val: marker_symbols[i % len(marker_symbols)] for i, val in enumerate(unique_styles)}
         coords_df['_marker_'] = coords_df[style_col].map(style_map)
     else:
         coords_df['_marker_'] = 'o'
-    # Color palette
+    
+    # Color palette - use custom palette if provided, otherwise generate default
     unique_colors = coords_df[color_col].dropna().unique() if color_col else ["__single__"]
-    palette = sns.color_palette('Set2', n_colors=len(unique_colors))
-    color_map = dict(zip(unique_colors, palette)) if color_col else {"__single__": "gray"}
+    if color_palette is not None: 
+        # Use provided color palette dictionary
+        color_map = color_palette.copy()
+        # Fill in any missing categories with default colors
+        missing_cats = [cat for cat in unique_colors if cat not in color_map]
+        if missing_cats:
+            default_palette = sns.color_palette('Set2', n_colors=len(missing_cats))
+            for cat, col in zip(missing_cats, default_palette):
+                color_map[cat] = col
+    else:
+        # Generate default palette
+        palette = sns.color_palette('Set2', n_colors=len(unique_colors))
+        color_map = dict(zip(unique_colors, palette)) if color_col else {"__single__": "gray"}
+    
     coords_df['_color_'] = coords_df[color_col].map(color_map) if color_col else "gray"
 
     # Scatter by color/style
@@ -94,7 +111,7 @@ def plot_dim_reduction(
             )
 
     ax.set_title(title, fontsize=font_sizes.get('title',14) if font_sizes else 14, pad=20)
-    ax.set_xlabel(x_label, fontsize=font_sizes.get('axes_label',12) if font_sizes else 12)
+    ax.set_xlabel(x_label, fontsize=font_sizes. get('axes_label',12) if font_sizes else 12)
     ax.set_ylabel(y_label, fontsize=font_sizes.get('axes_label',12) if font_sizes else 12)
     ax.tick_params(axis='both', which='major', labelsize=font_sizes.get('ticks_label',10) if font_sizes else 10)
 
@@ -103,21 +120,40 @@ def plot_dim_reduction(
 
     # ---- Centroid/Ellipse ----
     ellipse_legend_elements = []
-    if show_centroids or show_ellipses:
+    if show_centroids or show_ellipses: 
         if centroid_categories is None:
             centroid_categories = color_col
         if isinstance(centroid_categories, str):
             centroid_categories = [centroid_categories]
         coords_df['_group_'] = coords_df[centroid_categories].astype(str).agg('_'.join, axis=1)
         group_labels = coords_df['_group_'].unique()
-        palette_ellipse = sns.color_palette('Set2', n_colors=len(group_labels))
-        group_color_map = dict(zip(group_labels, palette_ellipse))
-        for group_name, group_data in coords_df.groupby('_group_'):
+        
+        # Use custom palette for ellipses if color_col matches centroid_categories
+        if color_palette is not None and len(centroid_categories) == 1 and centroid_categories[0] == color_col: 
+            group_color_map = color_map.copy()
+            # Preserve order from unique_colors for consistent legend ordering
+            ordered_groups = [g for g in unique_colors if g in group_labels]
+        else:
+            palette_ellipse = sns.color_palette('Set2', n_colors=len(group_labels))
+            group_color_map = dict(zip(group_labels, palette_ellipse))
+            ordered_groups = group_labels
+        
+        for group_name in ordered_groups:
+            group_data = coords_df[coords_df['_group_'] == group_name]
+            if len(group_data) == 0:
+                continue
+                
             x_vals = group_data[x].values
             y_vals = group_data[y].values
             centroid_x = np.mean(x_vals)
             centroid_y = np.mean(y_vals)
-            group_color = group_color_map[group_name]
+            
+            # Get color from appropriate map
+            if len(centroid_categories) == 1 and centroid_categories[0] == color_col:
+                group_color = color_map.get(group_data[color_col].iloc[0], 'gray')
+            else:
+                group_color = group_color_map[group_name]
+            
             group_label = group_data[centroid_categories[0]].iloc[0] if len(centroid_categories) == 1 else group_name
             if show_ellipses and len(x_vals) > 2:
                 cov = np.cov(x_vals, y_vals)
@@ -137,6 +173,7 @@ def plot_dim_reduction(
                     linewidth=2
                 )
                 ax.add_patch(ellipse)
+                # Append in order (no sorting needed later)
                 ellipse_legend_elements.append((group_label, Patch(facecolor=group_color, edgecolor=group_color, alpha=ellipse_alpha, label=str(group_label))))
             if show_centroids:
                 ax.scatter(
@@ -169,7 +206,7 @@ def plot_dim_reduction(
                 row[y]*(loadings_scale+0.15), 
                 str(idx), 
                 color=arrow_color, 
-                fontsize=font_sizes.get('loadings',12) if font_sizes else 11, 
+                fontsize=font_sizes. get('loadings',12) if font_sizes else 11, 
                 ha='center', 
                 va='center'
             )
@@ -180,12 +217,12 @@ def plot_dim_reduction(
     # Color legend
     if color_col is not None:
         legend_handles.append(Line2D([0], [0], color='none'))
-        legend_labels.append('Color Style')
+        legend_labels. append('Color Style')
         for val in unique_colors:
             legend_handles.append(Patch(facecolor=color_map[val], edgecolor='k', label=str(val), alpha=0.5))
             legend_labels.append(str(val))
     # Style legend
-    if style_col is not None:
+    if style_col is not None:  
         legend_handles.append(Line2D([0], [0], color='none'))
         legend_labels.append('Shape Style')
         for style in unique_styles:
@@ -195,11 +232,11 @@ def plot_dim_reduction(
                                          markeredgecolor='k', markeredgewidth=1, 
                                          markersize=10, linestyle='', label=str(style)))
             legend_labels.append(str(style))
-    # Ellipse legend
+    # Ellipse legend - NO SORTING, maintain order from loop
     if ellipse_legend_elements:
         legend_handles.append(Line2D([0], [0], color='none'))
         legend_labels.append('Ellipsoid')
-        for lab, handle in sorted(ellipse_legend_elements, key=lambda x: x[0]):
+        for lab, handle in ellipse_legend_elements:  # Removed sorted()
             legend_handles.append(handle)
             legend_labels.append(lab)
 
@@ -213,9 +250,19 @@ def plot_dim_reduction(
         bbox_to_anchor=(1.1, 0.5)
     )
     plt.tight_layout()
-    if filepath:
+
+    
+    if filepath and show:
         plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
-    plt.show()
+        plt.show()
+    elif filepath and not show:
+        plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
+        plt.close()
+    elif not filepath and show:
+        plt.show()
+    elif not filepath and not show:
+        return fig, ax
+
 
 
 # ---------------------------------------------------------------------------------------------------------------
