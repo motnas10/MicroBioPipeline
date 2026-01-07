@@ -27,7 +27,8 @@ def plot_dim_reduction(
     centroid_marker='X',
     show_ellipses=False,
     ellipse_std=1,
-    ellipse_alpha=0.2
+    ellipse_alpha=0.2,
+    filepath=None,
 ):
     """
     General-purpose dimensionality reduction plot for PCA/PCoA/tSNE/UMAP/etc.
@@ -212,6 +213,8 @@ def plot_dim_reduction(
         bbox_to_anchor=(1.1, 0.5)
     )
     plt.tight_layout()
+    if filepath:
+        plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
     plt.show()
 
 
