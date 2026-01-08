@@ -18,7 +18,7 @@ import colorsys
 
 # --------------------------------------------------------------------------------------------------------------
 # Define function to suggest font sizes based on figure dimensions
-def get_font_sizes(width, height, unit="in"):
+def get_font_sizes(width, height, unit="in", scale=5.0):
     """
     Suggest font sizes for a matplotlib plot based on figure size.
 
@@ -45,7 +45,7 @@ def get_font_sizes(width, height, unit="in"):
         raise ValueError("Unit must be 'in' or 'mm'")
 
     # Scale factor proportional to sqrt(area)
-    base_scale = (width * height) ** 0.5 / 5  # empirically tuned
+    base_scale = (width * height) ** 0.5 / scale  # empirically tuned
 
     font_sizes = {
         'title': round(14 * base_scale),
