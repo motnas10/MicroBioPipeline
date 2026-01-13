@@ -222,3 +222,73 @@ def dict_to_filename(d: Dict[str, Any],
     prefix = safe[:max_len - 33].rstrip("_")
     digest = hashlib.md5(safe.encode("utf-8")).hexdigest()
     return f"{prefix}_{digest}"
+
+
+# --------------------------------------------------------------------------------------------------------------
+import pandas as pd
+from typing import List, Optional, Dict
+
+def extract_significant_features(
+    ttest_file: str,
+    data_file: str,
+    p_value_threshold: float = 0.05,
+    p_value_column: str = 'p_value_FDR_corrected',
+    exclude_sheets: Optional[List[str]] = None,
+    start_sheet_index: int = 2
+) -> Dict[str, pd.DataFrame]:
+    """
+    Extract significant features from multiple Excel sheets based on t-test results.
+    
+    Parameters:
+    -----------
+    ttest_file : str
+        Path to Excel file containing t-test results
+    data_file : str
+        Path to Excel file containing original data
+    p_value_threshold : float, default=0.05
+        Threshold for determining significance
+    p_value_column : str, default='p_value_FDR_corrected'
+        Column name containing p-values in t-test results
+    exclude_sheets : List[str], optional
+        List of sheet names to exclude from processing
+    start_sheet_index : int, default=2
+        Index to start reading sheets (skips first N sheets)
+    
+    Returns:
+    --------
+    dict
+        Dictionary with sheet names as keys and DataFrames of significant features as values
+    """
+    
+    if exclude_sheets is None:
+        exclude_sheets = ["DTI_MD", "DTI_L1", "DTI_RD", "DTI_MO"]
+    
+    # Get sheet names
+    sheets = pd.ExcelFile(ttest_file).sheet_names[start_sheet_index:]
+    
+    # Dictionary to store significant data
+    sign_data_dict: Dict[str, pd.DataFrame] = {}
+    
+    # Loop over sheets to read data
+    for sheet in sheets:
+        if sheet not in exclude_sheets:
+            # Read t-test results
+            ttest = pd.read_excel(ttest_file, sheet_name=sheet, index_col=0, header=0)
+            
+            # Extract significant features
+            sig_features = ttest[ttest[p_value_column] < p_value_threshold].index.tolist()
+            
+            # Skip if no significant features found
+            if not sig_features:
+                print(f"No significant features found in sheet:  {sheet}")
+                continue
+            
+            # Filter original data to keep columns corresponding to significant features
+            data_sheet = pd.read_excel(data_file, sheet_name=sheet, index_col=0, header=0)
+            sig_data = data_sheet.loc[: , sig_features]
+            
+            # Store significant data in dictionary
+            sign_data_dict[sheet] = sig_data
+            print(f"Sheet '{sheet}':  {len(sig_features)} significant features extracted")
+    
+    return sign_data_dict
