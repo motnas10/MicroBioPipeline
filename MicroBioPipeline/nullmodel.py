@@ -34,9 +34,12 @@ def corr_pval_matrices(
     method: str = "pearson",
     corr_func: Optional[Callable[[np.ndarray, np.ndarray], Tuple[float, float]]] = None,
     n_jobs: Optional[int] = 5,
+    show_progress:  bool = True,
     ):
     """Compute correlation and p-value matrices in parallel, using matrix symmetry for efficiency."""
     from scipy.stats import pearsonr, spearmanr
+    from tqdm import tqdm
+    
     if corr_func is None:
         if method == "pearson":
             corr_func = pearsonr
@@ -59,10 +62,16 @@ def corr_pval_matrices(
     tasks = [ (arrs[i], arrs[j], corr_func) for i in range(n) for j in range(i, n) ]
 
     corr_mat = np.zeros((n, n))
-    pval_mat = np.zeros((n, n))
+    pval_mat = np. zeros((n, n))
 
     with ProcessPoolExecutor(max_workers=n_jobs) as executor:
-        results = list(executor.map(_pair_corr, tasks))
+        # Use tqdm to wrap the executor. map results
+        results = list(tqdm(
+            executor.map(_pair_corr, tasks),
+            total=len(tasks),
+            desc="Computing correlations",
+            disable=not show_progress
+        ))
 
     k = 0
     for i in range(n):
@@ -86,12 +95,14 @@ from .correlations import rankdata_torch, pearson_corr_pval, spearman_corr_pval
 def corr_pval_matrices_GPU(
     df: pd.DataFrame,
     axis: int = 0,
-    method: str = 'pearson',
+    method:  str = 'pearson',
     device: str = 'cuda',
-    corr_func=None
+    corr_func=None,
+    show_progress: bool = True
     ):
     """
-    Compute correlation and p-value matrices for a pandas DataFrame using one axis on GPU.
+    Compute correlation and p-value matrices for a pandas DataFrame using one axis on GPU. 
+    
     Parameters
     ----------
     df : pd.DataFrame
@@ -101,22 +112,25 @@ def corr_pval_matrices_GPU(
         1: compute pairwise correlations between columns
     method : str, default "pearson"
         Correlation type. "pearson", "spearman", or provide corr_func.
-    device : str, default 'cuda'
+    device :  str, default 'cuda'
         Device to use: 'cuda' or 'cpu'.
     corr_func : callable, optional
         Custom function: corr_func(x, y) -> (corr, pval).
+    show_progress : bool, default True
+        Whether to display a progress bar.
+    
     Returns
     -------
     tuple: (correlation matrix, p-value matrix)
         corr_df : pd.DataFrame
             Matrix of correlation coefficients.
         pval_df : pd.DataFrame
-            Matrix of p-values.
+            Matrix of p-values. 
     """
     if corr_func is None:
         if method == 'pearson':
             corr_func = pearson_corr_pval
-        elif method == 'spearman':
+        elif method == 'spearman': 
             corr_func = spearman_corr_pval
         else:
             raise ValueError("Unknown method; provide a corr_func or use 'pearson'/'spearman'.")
@@ -135,6 +149,12 @@ def corr_pval_matrices_GPU(
     corr_mat = torch.zeros((n, n), device=device)
     pval_mat = torch.zeros((n, n), device=device)
 
+    # Calculate total number of unique pairs (including diagonal)
+    total_pairs = (n * (n + 1)) // 2
+    
+    # Create progress bar
+    pbar = tqdm(total=total_pairs, desc="Computing correlations", disable=not show_progress)
+    
     for i in range(n):
         for j in range(i, n):
             x = arrs_torch[i]
@@ -145,6 +165,10 @@ def corr_pval_matrices_GPU(
             if i != j:
                 corr_mat[j, i] = corr
                 pval_mat[j, i] = pval
+            
+            pbar.update(1)
+    
+    pbar.close()
 
     corr_np = corr_mat.cpu().numpy()
     pval_np = pval_mat.cpu().numpy()
