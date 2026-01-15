@@ -714,3 +714,89 @@ def percolation_threshold(corr_matrix):
     thresholded_df = pd.DataFrame(final_matrix, index=corr_matrix.index, columns=corr_matrix.columns)
     return final_thresh, thresholded_df
 
+
+# --------------------------------------------------------------------------------------------------------------
+# Convert correlation result array to DataFrames
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
+def coord_array_to_df(result,
+                      feature_names=None,
+                      adjust_pvalue=False,
+                      show_progress=True):
+    """
+    Convert correlation result array to pandas DataFrames.
+    
+    Parameters:
+    -----------
+    result : np.ndarray
+        2D array with columns: [index1, index2, r, p] or [index1, index2, r, p, p_adjusted]
+    feature_names : list or None
+        Names of features for index/columns. If None, uses integer indices.
+    adjust_pvalue : bool
+        Whether the result includes adjusted p-values
+    show_progress : bool
+        Whether to show progress bar (default: True)
+    
+    Returns:
+    --------
+    corr_df : pd.DataFrame
+        Correlation coefficient matrix
+    pval_df : pd.DataFrame
+        P-value matrix
+    pval_adj_df :  pd.DataFrame or None
+        Adjusted p-value matrix if adjust_pvalue=True
+    """
+    # Determine the number of features
+    n_features = int(max(result[:, 0]. max(), result[:, 1].max())) + 1
+    
+    if feature_names is None:
+        feature_names = [f"Feature_{i}" for i in range(n_features)]
+    
+    # Initialize DataFrames
+    corr_df = pd.DataFrame(np.eye(n_features), 
+                           index=feature_names, 
+                           columns=feature_names)
+    pval_df = pd. DataFrame(np.zeros((n_features, n_features)),
+                           index=feature_names,
+                           columns=feature_names)
+    
+    if adjust_pvalue:
+        pval_adj_df = pd.DataFrame(np.zeros((n_features, n_features)),
+                                   index=feature_names,
+                                   columns=feature_names)
+    else:
+        pval_adj_df = None
+    
+    # Fill in the DataFrames with progress bar
+    iterator = tqdm(result, desc="Converting to matrices", unit="pairs") if show_progress else result
+    
+    for row in iterator: 
+        i = int(row[0])
+        j = int(row[1])
+        r = row[2]
+        p = row[3]
+        
+        # Fill symmetric positions
+        corr_df.iloc[i, j] = r
+        corr_df.iloc[j, i] = r
+        
+        pval_df.iloc[i, j] = p
+        pval_df.iloc[j, i] = p
+        
+        if adjust_pvalue and pval_adj_df is not None:
+            p_adj = row[4]
+            pval_adj_df. iloc[i, j] = p_adj
+            pval_adj_df.iloc[j, i] = p_adj
+    
+    # Set diagonal values
+    np.fill_diagonal(corr_df.values, 1.0)
+    np.fill_diagonal(pval_df.values, 0.0)
+    if adjust_pvalue and pval_adj_df is not None: 
+        np.fill_diagonal(pval_adj_df.values, 0.0)
+    
+    if adjust_pvalue: 
+        return corr_df, pval_df, pval_adj_df
+    else:
+        return corr_df, pval_df, None
