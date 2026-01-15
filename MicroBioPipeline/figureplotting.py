@@ -584,6 +584,7 @@ def plot_dim_reduction_plotly(
 
 
 # ---------------------------------------------------------------------------------------------------------------
+# Annotated Heatmap with Row/Column Categories
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -592,34 +593,34 @@ from matplotlib. patches import Rectangle
 from matplotlib.colors import Normalize, BoundaryNorm, LinearSegmentedColormap
 from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import ColorbarBase
-from typing import Optional, Dict, Tuple, Union, Literal
+from typing import Optional, Dict, Tuple, Union, Literal, List
 
 
 def plot_annotated_heatmap(
-    data: pd. DataFrame,
-    row_annotations:  Optional[pd.DataFrame] = None,
+    data: pd.DataFrame,
+    row_annotations: Optional[pd.DataFrame] = None,
     col_annotations: Optional[pd.DataFrame] = None,
-    row_palette: Optional[Dict[str, str]] = None,
-    col_palette: Optional[Dict[str, str]] = None,
+    row_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
+    col_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
     figsize: Tuple[float, float] = (10, 14),
     cmap: Union[str, LinearSegmentedColormap] = 'Blues',
     font_scale: float = 13,
     title: str = 'Annotated Heatmap',
     xlabel: str = 'Columns',
     ylabel: str = 'Rows',
-    row_patch_width: Optional[float] = None,
-    col_patch_height: Optional[float] = None,
+    row_patch_width: Optional[Union[float, List[float]]] = None,
+    col_patch_height: Optional[Union[float, List[float]]] = None,
     row_patch_auto_width: bool = True,
     col_patch_auto_height: bool = True,
     patch_width_ratio: float = 0.05,
     patch_height_ratio: float = 0.05,
-    row_annotation_col: Optional[str] = None,
-    col_annotation_col: Optional[str] = None,
-    row_legend_title: str = 'Row Categories',
-    col_legend_title: str = 'Column Categories',
-    value_legend_title:  str = 'Values',
+    row_annotation_col: Optional[Union[str, List[str]]] = None,
+    col_annotation_col: Optional[Union[str, List[str]]] = None,
+    row_legend_title: Union[str, List[str]] = 'Row Categories',
+    col_legend_title: Union[str, List[str]] = 'Column Categories',
+    value_legend_title: str = 'Values',
     value_legend_labels: Optional[Dict] = None,
-    legend_position: Literal['right', 'left', 'top', 'bottom'] = 'right',
+    legend_position:  Literal['right', 'left', 'top', 'bottom'] = 'right',
     legend_alignment: Literal['top', 'center', 'bottom'] = 'top',
     legend_bbox_x: float = 1.02,
     legend_auto_spacing: bool = True,
@@ -629,13 +630,13 @@ def plot_annotated_heatmap(
     dpi: int = 600,
     show_colorbar:  bool = False,
     colorbar_position:  Literal['right', 'left', 'top', 'bottom'] = 'right',
-    colorbar_size: str = '3%',
+    colorbar_size: str = '5%',
     colorbar_pad: float = 0.05,
-    colorbar_label:  Optional[str] = None,
+    colorbar_label: Optional[str] = None,
     colorbar_orientation: Optional[Literal['vertical', 'horizontal']] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
-    center: Optional[float] = None,
+    center:  Optional[float] = None,
     robust: bool = False,
     heatmap_type: Literal['qualitative', 'quantitative'] = 'qualitative',
     linewidths: float = 0.5,
@@ -648,42 +649,51 @@ def plot_annotated_heatmap(
     tick_pad_ratio: float = 1.5,
     base_tick_pad: float = 5.0,
     font_size_func: Optional[callable] = None,
-    cbar_kws: Optional[Dict] = None
-    ) -> Tuple[plt.Figure, plt. Axes]:
+    cbar_kws: Optional[Dict] = None,
+    row_patch_spacing: float = 0.0,
+    col_patch_spacing: float = 0.0
+) -> Tuple[plt.Figure, plt. Axes]:
     """
-    Create an annotated heatmap with colored patches for row and column categories. 
+    Create an annotated heatmap with colored patches for row and column categories.  
     Supports both qualitative (binary/categorical) and quantitative (gradient) heatmaps.
+    Now supports multiple annotation columns from a single DataFrame.
     
     Parameters
     ----------
-    data :  pd.DataFrame
+    data : pd. DataFrame
         The main data to plot as a heatmap. 
     row_annotations : pd.DataFrame, optional
-        DataFrame with row annotations (index should match data. index).
+        Single DataFrame with row annotations (index should match data. index).
+        Can contain multiple columns for different annotation types.
     col_annotations : pd.DataFrame, optional
-        DataFrame with column annotations (index should match data.columns).
-    row_palette : dict, optional
-        Dictionary mapping row categories to colors.
-    col_palette : dict, optional
-        Dictionary mapping column categories to colors.
-    figsize :  tuple, default (10, 14)
+        Single DataFrame with column annotations (index should match data.columns).
+        Can contain multiple columns for different annotation types.
+    row_palette : dict or list of dict, optional
+        Single dictionary or list of dictionaries mapping row categories to colors.
+        If list, must match length of row_annotation_col.
+    col_palette : dict or list of dict, optional
+        Single dictionary or list of dictionaries mapping column categories to colors.
+        If list, must match length of col_annotation_col.
+    figsize : tuple, default (10, 14)
         Figure size (width, height) in inches.
-    cmap :  str or colormap, default 'Blues'
+    cmap : str or colormap, default 'Blues'
         Colormap for the heatmap.  Popular options: 
         - Quantitative: 'viridis', 'plasma', 'RdYlBu_r', 'coolwarm', 'seismic'
-        - Qualitative:  'Blues', 'Reds', 'Greens'
+        - Qualitative: 'Blues', 'Reds', 'Greens'
     font_scale : float, default 13
-        Scale factor for font sizes.
+        Scale factor for font sizes. 
     title : str, default 'Annotated Heatmap'
         Title for the plot.
     xlabel : str, default 'Columns'
         Label for x-axis.
     ylabel : str, default 'Rows'
         Label for y-axis. 
-    row_patch_width : float, optional
-        Manual width of row annotation patches.  If None and auto is True, calculated automatically.
-    col_patch_height : float, optional
-        Manual height of column annotation patches. If None and auto is True, calculated automatically. 
+    row_patch_width : float or list of float, optional
+        Manual width(s) of row annotation patches. If None and auto is True, calculated automatically.
+        If list, must match length of row_annotation_col.
+    col_patch_height : float or list of float, optional
+        Manual height(s) of column annotation patches. If None and auto is True, calculated automatically. 
+        If list, must match length of col_annotation_col. 
     row_patch_auto_width : bool, default True
         Automatically calculate row patch width based on heatmap dimensions.
     col_patch_auto_height : bool, default True
@@ -692,21 +702,25 @@ def plot_annotated_heatmap(
         Ratio of heatmap width for row patches (used when auto width is True).
     patch_height_ratio : float, default 0.05
         Ratio of heatmap height for column patches (used when auto height is True).
-    row_annotation_col : str, optional
-        Column name in row_annotations to use for coloring.
-    col_annotation_col : str, optional
-        Column name in col_annotations to use for coloring.
-    row_legend_title : str, default 'Row Categories'
-        Title for row annotation legend.
-    col_legend_title : str, default 'Column Categories'
-        Title for column annotation legend.
+    row_annotation_col : str or list of str, optional
+        Column name(s) in row_annotations DataFrame to use for coloring.
+        If list, creates multiple annotation tracks.
+    col_annotation_col : str or list of str, optional
+        Column name(s) in col_annotations DataFrame to use for coloring.
+        If list, creates multiple annotation tracks.
+    row_legend_title : str or list of str, default 'Row Categories'
+        Title(s) for row annotation legend(s).
+        If list, must match length of row_annotation_col.
+    col_legend_title : str or list of str, default 'Column Categories'
+        Title(s) for column annotation legend(s).
+        If list, must match length of col_annotation_col.
     value_legend_title : str, default 'Values'
         Title for value legend (used for qualitative heatmaps).
-    value_legend_labels : dict, optional
+    value_legend_labels :  dict, optional
         Custom labels for value legend (e.g., {'high': 'Present', 'low': 'Absent'}).
         Only used when heatmap_type='qualitative'.
-    legend_position :  str, default 'right'
-        Position of legends: 'right', 'left', 'top', or 'bottom'.
+    legend_position : str, default 'right'
+        Position of legends:  'right', 'left', 'top', or 'bottom'.
     legend_alignment : str, default 'top'
         Alignment of legend group: 'top', 'center', or 'bottom'.
     legend_bbox_x : float, default 1.02
@@ -716,9 +730,9 @@ def plot_annotated_heatmap(
     legend_spacing : float, default 0.08
         Vertical spacing between legends (used if auto_spacing is False).
     legend_order : list, optional
-        Order of legends.  Can contain 'row', 'col', 'value'. 
-        Default is ['row', 'col', 'value'].
-    save_path :  str, optional
+        Order of legends.  Can contain 'row_0', 'row_1', ..., 'col_0', 'col_1', .. ., 'value'.
+        Default is all row legends, then all col legends, then value legend.
+    save_path : str, optional
         Path to save the figure. 
     dpi : int, default 600
         DPI for saved figure.
@@ -731,7 +745,7 @@ def plot_annotated_heatmap(
     colorbar_pad :  float, default 0.05
         Padding between heatmap and colorbar.
     colorbar_label : str, optional
-        Label for the colorbar. 
+        Label for the colorbar.
     colorbar_orientation : str, optional
         Orientation of colorbar.  If None, automatically determined from position.
     vmin : float, optional
@@ -764,38 +778,99 @@ def plot_annotated_heatmap(
     base_tick_pad : float, default 5.0
         Base padding (in points) added to calculated tick padding.
     font_size_func : callable, optional
-        Custom function to calculate font sizes. Should accept (width, height, unit, scale)
+        Custom function to calculate font sizes.  Should accept (width, height, unit, scale)
         and return a dict with keys:  'ticks_label', 'label', 'legend', 'legend_title', 'title'.
     cbar_kws : dict, optional
-        Additional keyword arguments for colorbar customization. 
+        Additional keyword arguments for colorbar customization.
+    row_patch_spacing : float, default 0.0
+        Spacing between multiple row annotation patches (in data coordinates).
+    col_patch_spacing : float, default 0.0
+        Spacing between multiple column annotation patches (in data coordinates).
     
     Returns
     -------
-    fig : matplotlib.figure. Figure
+    fig : matplotlib.figure.Figure
         The figure object. 
     ax : matplotlib.axes. Axes
         The axes object. 
     
     Examples
     --------
-    >>> # Automatic tick padding based on patches
+    >>> # Single annotation column (backward compatible)
     >>> fig, ax = plot_annotated_heatmap(
     ...     data=expression_data,
     ...     row_annotations=df_row_info,
     ...     col_annotations=df_col_info,
-    ...     heatmap_type='quantitative',
-    ...     auto_tick_padding=True,
-    ...     tick_pad_ratio=2.0  # More space
+    ...     row_annotation_col='category',
+    ...     col_annotation_col='type',
+    ...     row_palette={'A': 'red', 'B': 'blue'},
+    ...      col_palette={'X': 'green', 'Y': 'yellow'}
     ... )
     
-    >>> # Manual tick padding
+    >>> # Multiple annotation columns from same DataFrame
     >>> fig, ax = plot_annotated_heatmap(
     ...     data=expression_data,
-    ...     auto_tick_padding=False,
-    ...     tick_pad_x=15,
-    ...     tick_pad_y=25
+    ...     row_annotations=df_row_info,  # Single DataFrame with columns:  'category', 'subtype'
+    ...     col_annotations=df_col_info,  # Single DataFrame with columns: 'type', 'source', 'status'
+    ...     row_annotation_col=['category', 'subtype'],
+    ...     col_annotation_col=['type', 'source', 'status'],
+    ...     row_palette=[
+    ...         {'A': 'red', 'B': 'blue'},
+    ...          {'X': 'green', 'Y': 'yellow'}
+    ...     ],
+    ...     col_palette=[
+    ...         {'Type1': 'orange', 'Type2': 'purple'},
+    ...         {'S1': 'cyan', 'S2': 'magenta'},
+    ...         {'Active': 'lime', 'Inactive': 'gray'}
+    ...     ],
+    ...     row_legend_title=['Main Category', 'Subtype'],
+    ...     col_legend_title=['Type', 'Source', 'Status']
     ... )
     """
+    
+    # Convert single values to lists for uniform handling
+    if row_annotation_col is not None and not isinstance(row_annotation_col, list):
+        row_annotation_col = [row_annotation_col]
+    if col_annotation_col is not None and not isinstance(col_annotation_col, list):
+        col_annotation_col = [col_annotation_col]
+    if row_palette is not None and not isinstance(row_palette, list):
+        row_palette = [row_palette]
+    if col_palette is not None and not isinstance(col_palette, list):
+        col_palette = [col_palette]
+    if isinstance(row_legend_title, str):
+        row_legend_title = [row_legend_title]
+    if isinstance(col_legend_title, str):
+        col_legend_title = [col_legend_title]
+    if row_patch_width is not None and not isinstance(row_patch_width, list):
+        row_patch_width = [row_patch_width]
+    if col_patch_height is not None and not isinstance(col_patch_height, list):
+        col_patch_height = [col_patch_height]
+    
+    # Validate list lengths for row annotations
+    if row_annotation_col is not None:
+        n_row_annots = len(row_annotation_col)
+        if row_palette is not None:
+            assert len(row_palette) == n_row_annots, "row_palette must match row_annotation_col length"
+        if len(row_legend_title) == 1:
+            row_legend_title = row_legend_title * n_row_annots
+        assert len(row_legend_title) == n_row_annots, "row_legend_title must match row_annotation_col length"
+        if row_patch_width is not None:
+            if len(row_patch_width) == 1:
+                row_patch_width = row_patch_width * n_row_annots
+            assert len(row_patch_width) == n_row_annots, "row_patch_width must match row_annotation_col length"
+    
+    # Validate list lengths for col annotations
+    if col_annotation_col is not None:
+        n_col_annots = len(col_annotation_col)
+        if col_palette is not None: 
+            assert len(col_palette) == n_col_annots, "col_palette must match col_annotation_col length"
+        if len(col_legend_title) == 1:
+            col_legend_title = col_legend_title * n_col_annots
+        assert len(col_legend_title) == n_col_annots, "col_legend_title must match col_annotation_col length"
+        if col_patch_height is not None: 
+            if len(col_patch_height) == 1:
+                col_patch_height = col_patch_height * n_col_annots
+            assert len(col_patch_height) == n_col_annots, "col_patch_height must match col_annotation_col length"
     
     # Calculate font sizes
     if font_size_func is not None:
@@ -815,7 +890,7 @@ def plot_annotated_heatmap(
     # Ensure indices match if annotations are provided
     if row_annotations is not None:
         row_annotations = row_annotations.loc[data.index]
-    if col_annotations is not None: 
+    if col_annotations is not None:
         col_annotations = col_annotations.loc[data.columns]
     
     # Automatically enable colorbar for quantitative heatmaps
@@ -838,17 +913,17 @@ def plot_annotated_heatmap(
     
     # Set colorbar position and orientation
     if show_colorbar:
-        cbar_kws. update({
+        cbar_kws.update({
             'orientation': colorbar_orientation,
             'pad': colorbar_pad,
-            'label':  colorbar_label if colorbar_label else ''
+            'label': colorbar_label if colorbar_label else ''
         })
         
         # Add fraction (size) parameter
         if 'fraction' not in cbar_kws:
             # Convert percentage string to float
             if isinstance(colorbar_size, str) and '%' in colorbar_size: 
-                size_value = float(colorbar_size. rstrip('%')) / 100
+                size_value = float(colorbar_size.rstrip('%')) / 100
             else: 
                 size_value = 0.03
             cbar_kws['fraction'] = size_value
@@ -873,7 +948,7 @@ def plot_annotated_heatmap(
     # Customize colorbar if shown
     if show_colorbar and hasattr(im, 'collections') and len(im.collections) > 0:
         # Get the colorbar
-        cbar = ax.collections[0].colorbar
+        cbar = ax.collections[0]. colorbar
         
         # Customize colorbar label
         if colorbar_label:
@@ -911,27 +986,48 @@ def plot_annotated_heatmap(
     ylim = ax.get_ylim()
     
     # Get heatmap dimensions
-    n_rows = len(data.index)
+    n_rows = len(data. index)
     n_cols = len(data.columns)
     heatmap_width = xlim[1] - xlim[0]
     heatmap_height = ylim[1] - ylim[0]
     
-    # Calculate automatic patch dimensions
-    if row_patch_auto_width and row_patch_width is None: 
-        # Calculate width based on heatmap width
-        calculated_row_patch_width = heatmap_width * patch_width_ratio
-        # Ensure minimum visibility (at least 0.3 units)
-        row_patch_width = max(calculated_row_patch_width, 0.3)
-    elif row_patch_width is None: 
-        row_patch_width = 0.5  # default
+    # Calculate automatic patch dimensions for each annotation
+    if row_annotation_col is not None:
+        n_row_annots = len(row_annotation_col)
+        if row_patch_width is None:
+            row_patch_width = [None] * n_row_annots
+        
+        for idx in range(n_row_annots):
+            if row_patch_auto_width and row_patch_width[idx] is None:
+                # Calculate width based on heatmap width
+                calculated_row_patch_width = heatmap_width * patch_width_ratio
+                # Ensure minimum visibility (at least 0.3 units)
+                row_patch_width[idx] = max(calculated_row_patch_width, 0.3)
+            elif row_patch_width[idx] is None:
+                row_patch_width[idx] = 0.5  # default
     
-    if col_patch_auto_height and col_patch_height is None:
-        # Calculate height based on heatmap height
-        calculated_col_patch_height = heatmap_height * patch_height_ratio
-        # Ensure minimum visibility (at least 1 unit)
-        col_patch_height = max(calculated_col_patch_height, 1.0)
-    elif col_patch_height is None:
-        col_patch_height = 2.0  # default
+    if col_annotation_col is not None:
+        n_col_annots = len(col_annotation_col)
+        if col_patch_height is None:
+            col_patch_height = [None] * n_col_annots
+        
+        for idx in range(n_col_annots):
+            if col_patch_auto_height and col_patch_height[idx] is None:
+                # Calculate height based on heatmap height
+                calculated_col_patch_height = heatmap_height * patch_height_ratio
+                # Ensure minimum visibility (at least 1 unit)
+                col_patch_height[idx] = max(calculated_col_patch_height, 1.0)
+            elif col_patch_height[idx] is None:
+                col_patch_height[idx] = 2.0  # default
+    
+    # Calculate total width/height for all patches including spacing
+    total_row_patch_width = 0
+    if row_annotation_col is not None and row_palette is not None:
+        total_row_patch_width = sum(row_patch_width) + row_patch_spacing * (len(row_patch_width) - 1)
+    
+    total_col_patch_height = 0
+    if col_annotation_col is not None and col_palette is not None:
+        total_col_patch_height = sum(col_patch_height) + col_patch_spacing * (len(col_patch_height) - 1)
     
     # Calculate automatic tick padding based on patch dimensions
     if auto_tick_padding:
@@ -940,7 +1036,7 @@ def plot_annotated_heatmap(
         
         # Convert patch dimensions from data coordinates to points
         # For y-axis (row patches): width in data coords -> points
-        if tick_pad_y is None and row_annotations is not None and row_annotation_col is not None:
+        if tick_pad_y is None and total_row_patch_width > 0:
             # Calculate width in inches based on figure size and axis position
             bbox = ax.get_position()
             ax_width_inches = bbox.width * figsize[0]
@@ -949,7 +1045,7 @@ def plot_annotated_heatmap(
             data_per_inch_x = heatmap_width / ax_width_inches
             
             # Patch width in inches
-            patch_width_inches = row_patch_width / data_per_inch_x
+            patch_width_inches = total_row_patch_width / data_per_inch_x
             
             # Convert to points (1 inch = 72 points)
             patch_width_points = patch_width_inches * 35
@@ -960,19 +1056,19 @@ def plot_annotated_heatmap(
             tick_pad_y = base_tick_pad
         
         # For x-axis (column patches): height in data coords -> points
-        if tick_pad_x is None and col_annotations is not None and col_annotation_col is not None:
+        if tick_pad_x is None and total_col_patch_height > 0:
             # Calculate height in inches based on figure size and axis position
             bbox = ax.get_position()
-            ax_height_inches = bbox.height * figsize[1]
+            ax_height_inches = bbox. height * figsize[1]
             
             # Data units per inch
             data_per_inch_y = heatmap_height / ax_height_inches
             
             # Patch height in inches
-            patch_height_inches = col_patch_height / data_per_inch_y
+            patch_height_inches = total_col_patch_height / data_per_inch_y
             
             # Convert to points (1 inch = 72 points)
-            patch_height_points = - patch_height_inches * 35
+            patch_height_points = patch_height_inches * 35
             
             # Calculate padding with ratio and base
             tick_pad_x = base_tick_pad + (patch_height_points * tick_pad_ratio)
@@ -980,7 +1076,7 @@ def plot_annotated_heatmap(
             tick_pad_x = base_tick_pad
     else:
         # Use manual padding or defaults
-        if tick_pad_x is None:
+        if tick_pad_x is None: 
             tick_pad_x = 20
         if tick_pad_y is None:
             tick_pad_y = 20
@@ -992,65 +1088,79 @@ def plot_annotated_heatmap(
     # Add spines around the heatmap
     for _, spine in ax.spines.items():
         spine.set_visible(True)
-        spine.set_linewidth(0.5)
+        spine.set_linewidth(1.0)
         spine.set_color('black')
     
     # Dictionary to store legend information with keys
     legend_dict = {}
     
-    # Add patches for rows (left side)
-    if row_annotations is not None and row_annotation_col is not None and row_palette is not None:
-        for i, row_idx in enumerate(data.index):
-            category = row_annotations.loc[row_idx, row_annotation_col]
-            color = row_palette. get(category, 'grey')
-            rect = Rectangle(
-                (xlim[0] - row_patch_width, i),
-                row_patch_width,
-                1,
-                linewidth=linewidths,
-                edgecolor=linecolor,
-                facecolor=color,
-                clip_on=False
-            )
-            ax.add_patch(rect)
-        
-        # Create legend for row categories
-        legend_elements_row = [
-            Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
-            for category, color in row_palette.items()
-        ]
-        legend_dict['row'] = {
-            'handles': legend_elements_row,
-            'title': row_legend_title,
-            'n_items': len(legend_elements_row)
-        }
+    # Add patches for rows (left side) - multiple annotation columns
+    if row_annotations is not None and row_annotation_col is not None and row_palette is not None: 
+        for annot_idx in range(len(row_annotation_col)):
+            # Calculate starting position for this annotation
+            # Start from leftmost and move right for each annotation
+            start_x = xlim[0] - total_row_patch_width + sum(row_patch_width[:annot_idx]) + row_patch_spacing * annot_idx
+            
+            col_name = row_annotation_col[annot_idx]
+            for i, row_idx in enumerate(data.index):
+                category = row_annotations.loc[row_idx, col_name]
+                color = row_palette[annot_idx]. get(category, 'grey')
+                rect = Rectangle(
+                    (start_x, i),
+                    row_patch_width[annot_idx],
+                    1,
+                    linewidth=linewidths,
+                    edgecolor=linecolor,
+                    facecolor=color,
+                    clip_on=False,
+                    zorder=-1
+                )
+                ax.add_patch(rect)
+            
+            # Create legend for this row annotation
+            legend_elements_row = [
+                Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
+                for category, color in row_palette[annot_idx]. items()
+            ]
+            legend_dict[f'row_{annot_idx}'] = {
+                'handles': legend_elements_row,
+                'title': row_legend_title[annot_idx],
+                'n_items': len(legend_elements_row)
+            }
     
-    # Add patches for columns (bottom)
+    # Add patches for columns (bottom) - multiple annotation columns
     if col_annotations is not None and col_annotation_col is not None and col_palette is not None:
-        for j, col_idx in enumerate(data.columns):
-            category = col_annotations.loc[col_idx, col_annotation_col]
-            color = col_palette.get(category, 'grey')
-            rect = Rectangle(
-                (j, ylim[0]),
-                1,
-                col_patch_height,
-                linewidth=linewidths,
-                edgecolor=linecolor,
-                facecolor=color,
-                clip_on=False
-            )
-            ax.add_patch(rect)
-        
-        # Create legend for column categories
-        legend_elements_col = [
-            Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
-            for category, color in col_palette.items()
-        ]
-        legend_dict['col'] = {
-            'handles':  legend_elements_col,
-            'title': col_legend_title,
-            'n_items':  len(legend_elements_col)
-        }
+        for annot_idx in range(len(col_annotation_col)):
+            # Calculate starting position for this annotation
+            # Start from bottom and move up for each annotation
+            start_y = ylim[0] + sum(col_patch_height[:annot_idx]) + col_patch_spacing * annot_idx
+            
+            col_name = col_annotation_col[annot_idx]
+            for j, col_idx in enumerate(data.columns):
+                category = col_annotations.loc[col_idx, col_name]
+                color = col_palette[annot_idx].get(category, 'grey')
+                rect = Rectangle(
+                    (j, start_y),
+                    1,
+                    col_patch_height[annot_idx],
+                    linewidth=linewidths,
+                    edgecolor=linecolor,
+                    facecolor=color,
+                    clip_on=False,
+                    zorder=-1
+                )
+                ax.add_patch(rect)
+            
+            # Create legend for this column annotation
+            legend_elements_col = [
+                Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
+                for category, color in col_palette[annot_idx]. items()
+            ]
+            legend_dict[f'col_{annot_idx}'] = {
+                'handles': legend_elements_col,
+                'title': col_legend_title[annot_idx],
+                'n_items': len(legend_elements_col)
+            }
     
     # Add value legend if specified (only for qualitative heatmaps)
     if value_legend_labels is not None and heatmap_type == 'qualitative':
@@ -1076,12 +1186,18 @@ def plot_annotated_heatmap(
         legend_dict['value'] = {
             'handles': legend_elements_value,
             'title': value_legend_title,
-            'n_items': len(legend_elements_value)
+            'n_items':  len(legend_elements_value)
         }
     
     # Determine legend order
     if legend_order is None:
-        legend_order = ['row', 'col', 'value']
+        # Default order: all row legends, then all col legends, then value
+        legend_order = []
+        if row_annotation_col is not None:
+            legend_order.extend([f'row_{i}' for i in range(len(row_annotation_col))])
+        if col_annotation_col is not None:
+            legend_order.extend([f'col_{i}' for i in range(len(col_annotation_col))])
+        legend_order.append('value')
     
     # Filter legend_order to only include legends that exist
     legends_to_plot = [key for key in legend_order if key in legend_dict]
@@ -1105,7 +1221,7 @@ def plot_annotated_heatmap(
             start_y = 0.5 + (total_legend_height / 2)
         elif legend_alignment == 'bottom':
             start_y = 0.05 + total_legend_height
-        else: 
+        else:
             start_y = 0.95  # default to top
         
         # Calculate positions for each legend
@@ -1120,7 +1236,7 @@ def plot_annotated_heatmap(
             start_y = 0.95
         elif legend_alignment == 'center':
             start_y = 0.5
-        elif legend_alignment == 'bottom':
+        elif legend_alignment == 'bottom': 
             start_y = 0.05 + (len(legends_to_plot) - 1) * legend_spacing
         else:
             start_y = 0.95
@@ -1135,7 +1251,7 @@ def plot_annotated_heatmap(
             legend_bbox_x = legend_bbox_x - 0.15  # Move legends further left
     
     # Set bbox_to_anchor based on position
-    if legend_position == 'right':
+    if legend_position == 'right': 
         legend_loc = 'center left'
         bbox_x = legend_bbox_x
     elif legend_position == 'left':
@@ -1147,7 +1263,7 @@ def plot_annotated_heatmap(
     elif legend_position == 'bottom':
         legend_loc = 'upper center'
         bbox_x = 0.5
-    else: 
+    else:
         legend_loc = 'center left'
         bbox_x = legend_bbox_x
     
