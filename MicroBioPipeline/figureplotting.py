@@ -597,8 +597,8 @@ from typing import Optional, Dict, Tuple, Union, Literal, List
 
 
 def plot_annotated_heatmap(
-    data: pd.DataFrame,
-    row_annotations: Optional[pd.DataFrame] = None,
+    data: pd. DataFrame,
+    row_annotations:  Optional[pd.DataFrame] = None,
     col_annotations: Optional[pd.DataFrame] = None,
     row_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
     col_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
@@ -632,7 +632,7 @@ def plot_annotated_heatmap(
     colorbar_position:  Literal['right', 'left', 'top', 'bottom'] = 'right',
     colorbar_size: str = '5%',
     colorbar_pad: float = 0.05,
-    colorbar_label: Optional[str] = None,
+    colorbar_label:  Optional[str] = None,
     colorbar_orientation: Optional[Literal['vertical', 'horizontal']] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
@@ -641,6 +641,8 @@ def plot_annotated_heatmap(
     heatmap_type: Literal['qualitative', 'quantitative'] = 'qualitative',
     linewidths: float = 0.5,
     linecolor: str = 'grey',
+    xticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
+    yticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
     xticklabels_rotation: float = 45,
     yticklabels_rotation: float = 0,
     auto_tick_padding: bool = True,
@@ -651,10 +653,20 @@ def plot_annotated_heatmap(
     font_size_func: Optional[callable] = None,
     cbar_kws: Optional[Dict] = None,
     row_patch_spacing: float = 0.0,
-    col_patch_spacing: float = 0.0
+    col_patch_spacing: float = 0.0,
+    row_separation_col:  Optional[Union[str, List[str]]] = None,
+    col_separation_col: Optional[Union[str, List[str]]] = None,
+    row_separation_linewidth: Union[float, List[float]] = 2.0,
+    col_separation_linewidth: Union[float, List[float]] = 2.0,
+    row_separation_color: Union[str, List[str]] = 'black',
+    col_separation_color: Union[str, List[str]] = 'black',
+    row_separation_linestyle: Union[str, List[str]] = '-',
+    col_separation_linestyle: Union[str, List[str]] = '-',
+    row_separation_alpha: Union[float, List[float]] = 1.0,
+    col_separation_alpha: Union[float, List[float]] = 1.0
 ) -> Tuple[plt.Figure, plt. Axes]:
     """
-    Create an annotated heatmap with colored patches for row and column categories.  
+    Create an annotated heatmap with colored patches for row and column categories. 
     Supports both qualitative (binary/categorical) and quantitative (gradient) heatmaps.
     Now supports multiple annotation columns from a single DataFrame.
     
@@ -681,19 +693,19 @@ def plot_annotated_heatmap(
         - Quantitative: 'viridis', 'plasma', 'RdYlBu_r', 'coolwarm', 'seismic'
         - Qualitative: 'Blues', 'Reds', 'Greens'
     font_scale : float, default 13
-        Scale factor for font sizes. 
+        Scale factor for font sizes.
     title : str, default 'Annotated Heatmap'
         Title for the plot.
     xlabel : str, default 'Columns'
         Label for x-axis.
     ylabel : str, default 'Rows'
-        Label for y-axis. 
+        Label for y-axis.  
     row_patch_width : float or list of float, optional
-        Manual width(s) of row annotation patches. If None and auto is True, calculated automatically.
+        Manual width(s) of row annotation patches.  If None and auto is True, calculated automatically.
         If list, must match length of row_annotation_col.
     col_patch_height : float or list of float, optional
-        Manual height(s) of column annotation patches. If None and auto is True, calculated automatically. 
-        If list, must match length of col_annotation_col. 
+        Manual height(s) of column annotation patches. If None and auto is True, calculated automatically.  
+        If list, must match length of col_annotation_col.  
     row_patch_auto_width : bool, default True
         Automatically calculate row patch width based on heatmap dimensions.
     col_patch_auto_height : bool, default True
@@ -703,7 +715,7 @@ def plot_annotated_heatmap(
     patch_height_ratio : float, default 0.05
         Ratio of heatmap height for column patches (used when auto height is True).
     row_annotation_col : str or list of str, optional
-        Column name(s) in row_annotations DataFrame to use for coloring.
+        Column name(s) in row_annotations DataFrame to use for coloring. 
         If list, creates multiple annotation tracks.
     col_annotation_col : str or list of str, optional
         Column name(s) in col_annotations DataFrame to use for coloring.
@@ -716,10 +728,10 @@ def plot_annotated_heatmap(
         If list, must match length of col_annotation_col.
     value_legend_title : str, default 'Values'
         Title for value legend (used for qualitative heatmaps).
-    value_legend_labels :  dict, optional
+    value_legend_labels : dict, optional
         Custom labels for value legend (e.g., {'high': 'Present', 'low': 'Absent'}).
         Only used when heatmap_type='qualitative'.
-    legend_position : str, default 'right'
+    legend_position :  str, default 'right'
         Position of legends:  'right', 'left', 'top', or 'bottom'.
     legend_alignment : str, default 'top'
         Alignment of legend group: 'top', 'center', or 'bottom'.
@@ -730,7 +742,7 @@ def plot_annotated_heatmap(
     legend_spacing : float, default 0.08
         Vertical spacing between legends (used if auto_spacing is False).
     legend_order : list, optional
-        Order of legends.  Can contain 'row_0', 'row_1', ..., 'col_0', 'col_1', .. ., 'value'.
+        Order of legends.  Can contain 'row_0', 'row_1', .. ., 'col_0', 'col_1', .. ., 'value'. 
         Default is all row legends, then all col legends, then value legend.
     save_path : str, optional
         Path to save the figure. 
@@ -740,12 +752,12 @@ def plot_annotated_heatmap(
         Whether to show colorbar for heatmap values.  Automatically True for quantitative heatmaps.
     colorbar_position : str, default 'right'
         Position of colorbar: 'right', 'left', 'top', or 'bottom'.
-    colorbar_size : str, default '3%'
+    colorbar_size : str, default '5%'
         Size of the colorbar (percentage of the axes size).
     colorbar_pad :  float, default 0.05
         Padding between heatmap and colorbar.
     colorbar_label : str, optional
-        Label for the colorbar.
+        Label for the colorbar. 
     colorbar_orientation : str, optional
         Orientation of colorbar.  If None, automatically determined from position.
     vmin : float, optional
@@ -762,16 +774,22 @@ def plot_annotated_heatmap(
         Width of lines between cells.
     linecolor : str, default 'grey'
         Color of lines between cells.
-    xticklabels_rotation :  float, default 45
+    xticklabels : pd. Series, list, or np.ndarray, optional
+        Custom labels for x-axis (columns). If None, uses data. columns.
+        Must have the same length as data.columns. 
+    yticklabels : pd.Series, list, or np. ndarray, optional
+        Custom labels for y-axis (rows). If None, uses data.index. 
+        Must have the same length as data.index.
+    xticklabels_rotation : float, default 45
         Rotation angle for x-axis tick labels.
     yticklabels_rotation : float, default 0
         Rotation angle for y-axis tick labels.
     auto_tick_padding : bool, default True
         Automatically calculate tick padding based on patch dimensions.
     tick_pad_x : float, optional
-        Manual padding for x-axis ticks.  If None and auto is True, calculated automatically. 
+        Manual padding for x-axis ticks.  If None and auto is True, calculated automatically.  
     tick_pad_y : float, optional
-        Manual padding for y-axis ticks. If None and auto is True, calculated automatically. 
+        Manual padding for y-axis ticks. If None and auto is True, calculated automatically.  
     tick_pad_ratio : float, default 1.5
         Multiplier for converting patch dimensions to tick padding (in points).
         Higher values create more space between patches and tick labels.
@@ -786,45 +804,62 @@ def plot_annotated_heatmap(
         Spacing between multiple row annotation patches (in data coordinates).
     col_patch_spacing : float, default 0.0
         Spacing between multiple column annotation patches (in data coordinates).
+    row_separation_col : str or list of str, optional
+        Column name(s) in row_annotations to use for drawing horizontal separation lines
+        between different categories. If list, draws multiple levels of separation lines.
+    col_separation_col : str or list of str, optional
+        Column name(s) in col_annotations to use for drawing vertical separation lines
+        between different categories.  If list, draws multiple levels of separation lines.
+    row_separation_linewidth : float or list of float, default 2.0
+        Line width(s) for horizontal separation lines.  If list, must match length of row_separation_col.
+    col_separation_linewidth : float or list of float, default 2.0
+        Line width(s) for vertical separation lines. If list, must match length of col_separation_col.
+    row_separation_color : str or list of str, default 'black'
+        Color(s) for horizontal separation lines. If list, must match length of row_separation_col.
+    col_separation_color : str or list of str, default 'black'
+        Color(s) for vertical separation lines. If list, must match length of col_separation_col.
+    row_separation_linestyle : str or list of str, default '-'
+        Line style(s) for horizontal separation lines. If list, must match length of row_separation_col.
+        Options: '-', '--', '-.', ':'
+    col_separation_linestyle : str or list of str, default '-'
+        Line style(s) for vertical separation lines. If list, must match length of col_separation_col.
+        Options: '-', '--', '-.', ':'
+    row_separation_alpha : float or list of float, default 1.0
+        Alpha (transparency) value(s) for horizontal separation lines (0.0-1.0).
+        If list, must match length of row_separation_col.  0.0 is fully transparent, 1.0 is fully opaque.
+    col_separation_alpha : float or list of float, default 1.0
+        Alpha (transparency) value(s) for vertical separation lines (0.0-1.0).
+        If list, must match length of col_separation_col. 0.0 is fully transparent, 1.0 is fully opaque.
     
     Returns
     -------
     fig : matplotlib.figure.Figure
-        The figure object. 
-    ax : matplotlib.axes. Axes
+        The figure object.  
+    ax : matplotlib.axes.Axes
         The axes object. 
     
     Examples
     --------
-    >>> # Single annotation column (backward compatible)
+    >>> # Multiple level separations with different alpha values
+    >>> fig, ax = plot_annotated_heatmap(
+    ...     data=expression_data,
+    ...     row_annotations=df_row_info,
+    ...     row_separation_col=['major_category', 'subcategory'],
+    ...     row_separation_linewidth=[3. 0, 1.5],
+    ...     row_separation_color=['black', 'gray'],
+    ...     row_separation_linestyle=['-', '--'],
+    ...     row_separation_alpha=[1.0, 0.5]  # Solid major, semi-transparent sub
+    ... )
+    
+    >>> # Subtle separation lines using alpha
     >>> fig, ax = plot_annotated_heatmap(
     ...     data=expression_data,
     ...     row_annotations=df_row_info,
     ...     col_annotations=df_col_info,
-    ...     row_annotation_col='category',
-    ...     col_annotation_col='type',
-    ...     row_palette={'A': 'red', 'B': 'blue'},
-    ...      col_palette={'X': 'green', 'Y': 'yellow'}
-    ... )
-    
-    >>> # Multiple annotation columns from same DataFrame
-    >>> fig, ax = plot_annotated_heatmap(
-    ...     data=expression_data,
-    ...     row_annotations=df_row_info,  # Single DataFrame with columns:  'category', 'subtype'
-    ...     col_annotations=df_col_info,  # Single DataFrame with columns: 'type', 'source', 'status'
-    ...     row_annotation_col=['category', 'subtype'],
-    ...     col_annotation_col=['type', 'source', 'status'],
-    ...     row_palette=[
-    ...         {'A': 'red', 'B': 'blue'},
-    ...          {'X': 'green', 'Y': 'yellow'}
-    ...     ],
-    ...     col_palette=[
-    ...         {'Type1': 'orange', 'Type2': 'purple'},
-    ...         {'S1': 'cyan', 'S2': 'magenta'},
-    ...         {'Active': 'lime', 'Inactive': 'gray'}
-    ...     ],
-    ...     row_legend_title=['Main Category', 'Subtype'],
-    ...     col_legend_title=['Type', 'Source', 'Status']
+    ...     row_separation_col='category',
+    ...     col_separation_col='type',
+    ...     row_separation_alpha=0.3,  # Very subtle
+    ...      col_separation_alpha=0.6   # More visible
     ... )
     """
     
@@ -846,8 +881,55 @@ def plot_annotated_heatmap(
     if col_patch_height is not None and not isinstance(col_patch_height, list):
         col_patch_height = [col_patch_height]
     
+    # Convert separation parameters to lists
+    if row_separation_col is not None and not isinstance(row_separation_col, list):
+        row_separation_col = [row_separation_col]
+    if col_separation_col is not None and not isinstance(col_separation_col, list):
+        col_separation_col = [col_separation_col]
+    if row_separation_col is not None: 
+        if not isinstance(row_separation_linewidth, list):
+            row_separation_linewidth = [row_separation_linewidth] * len(row_separation_col)
+        if not isinstance(row_separation_color, list):
+            row_separation_color = [row_separation_color] * len(row_separation_col)
+        if not isinstance(row_separation_linestyle, list):
+            row_separation_linestyle = [row_separation_linestyle] * len(row_separation_col)
+        if not isinstance(row_separation_alpha, list):
+            row_separation_alpha = [row_separation_alpha] * len(row_separation_col)
+    if col_separation_col is not None:
+        if not isinstance(col_separation_linewidth, list):
+            col_separation_linewidth = [col_separation_linewidth] * len(col_separation_col)
+        if not isinstance(col_separation_color, list):
+            col_separation_color = [col_separation_color] * len(col_separation_col)
+        if not isinstance(col_separation_linestyle, list):
+            col_separation_linestyle = [col_separation_linestyle] * len(col_separation_col)
+        if not isinstance(col_separation_alpha, list):
+            col_separation_alpha = [col_separation_alpha] * len(col_separation_col)
+    
+    # Process custom tick labels
+    if xticklabels is not None:  
+        if isinstance(xticklabels, pd.Series):
+            # If Series, ensure index matches data columns
+            xticklabels = xticklabels.loc[data.columns]. values
+        else:
+            # Convert to array/list
+            xticklabels = list(xticklabels)
+        assert len(xticklabels) == len(data.columns), "xticklabels must match data. columns length"
+    else:
+        xticklabels = data.columns
+    
+    if yticklabels is not None: 
+        if isinstance(yticklabels, pd.Series):
+            # If Series, ensure index matches data index
+            yticklabels = yticklabels.loc[data.index].values
+        else:
+            # Convert to array/list
+            yticklabels = list(yticklabels)
+        assert len(yticklabels) == len(data.index), "yticklabels must match data.index length"
+    else:
+        yticklabels = data.index
+    
     # Validate list lengths for row annotations
-    if row_annotation_col is not None:
+    if row_annotation_col is not None: 
         n_row_annots = len(row_annotation_col)
         if row_palette is not None:
             assert len(row_palette) == n_row_annots, "row_palette must match row_annotation_col length"
@@ -862,15 +944,32 @@ def plot_annotated_heatmap(
     # Validate list lengths for col annotations
     if col_annotation_col is not None:
         n_col_annots = len(col_annotation_col)
-        if col_palette is not None: 
+        if col_palette is not None:  
             assert len(col_palette) == n_col_annots, "col_palette must match col_annotation_col length"
         if len(col_legend_title) == 1:
             col_legend_title = col_legend_title * n_col_annots
         assert len(col_legend_title) == n_col_annots, "col_legend_title must match col_annotation_col length"
-        if col_patch_height is not None: 
+        if col_patch_height is not None:  
             if len(col_patch_height) == 1:
                 col_patch_height = col_patch_height * n_col_annots
             assert len(col_patch_height) == n_col_annots, "col_patch_height must match col_annotation_col length"
+    
+    # Validate separation columns
+    if row_separation_col is not None and row_annotations is not None:
+        for sep_col in row_separation_col:
+            assert sep_col in row_annotations. columns, f"row_separation_col '{sep_col}' not found in row_annotations"
+        assert len(row_separation_linewidth) == len(row_separation_col), "row_separation_linewidth must match row_separation_col length"
+        assert len(row_separation_color) == len(row_separation_col), "row_separation_color must match row_separation_col length"
+        assert len(row_separation_linestyle) == len(row_separation_col), "row_separation_linestyle must match row_separation_col length"
+        assert len(row_separation_alpha) == len(row_separation_col), "row_separation_alpha must match row_separation_col length"
+    
+    if col_separation_col is not None and col_annotations is not None: 
+        for sep_col in col_separation_col:
+            assert sep_col in col_annotations. columns, f"col_separation_col '{sep_col}' not found in col_annotations"
+        assert len(col_separation_linewidth) == len(col_separation_col), "col_separation_linewidth must match col_separation_col length"
+        assert len(col_separation_color) == len(col_separation_col), "col_separation_color must match col_separation_col length"
+        assert len(col_separation_linestyle) == len(col_separation_col), "col_separation_linestyle must match col_separation_col length"
+        assert len(col_separation_alpha) == len(col_separation_col), "col_separation_alpha must match col_separation_col length"
     
     # Calculate font sizes
     if font_size_func is not None:
@@ -888,13 +987,13 @@ def plot_annotated_heatmap(
         }
     
     # Ensure indices match if annotations are provided
-    if row_annotations is not None:
+    if row_annotations is not None: 
         row_annotations = row_annotations.loc[data.index]
     if col_annotations is not None:
         col_annotations = col_annotations.loc[data.columns]
     
     # Automatically enable colorbar for quantitative heatmaps
-    if heatmap_type == 'quantitative': 
+    if heatmap_type == 'quantitative':  
         show_colorbar = True
     
     # Determine colorbar orientation
@@ -905,26 +1004,26 @@ def plot_annotated_heatmap(
             colorbar_orientation = 'horizontal'
     
     # Create figure and axis
-    fig, ax = plt. subplots(figsize=figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     
     # Prepare colorbar keyword arguments
-    if cbar_kws is None: 
+    if cbar_kws is None:  
         cbar_kws = {}
     
     # Set colorbar position and orientation
     if show_colorbar:
-        cbar_kws.update({
+        cbar_kws. update({
             'orientation': colorbar_orientation,
-            'pad': colorbar_pad,
-            'label': colorbar_label if colorbar_label else ''
+            'pad':  colorbar_pad,
+            'label':  colorbar_label if colorbar_label else ''
         })
         
         # Add fraction (size) parameter
         if 'fraction' not in cbar_kws:
             # Convert percentage string to float
-            if isinstance(colorbar_size, str) and '%' in colorbar_size: 
-                size_value = float(colorbar_size.rstrip('%')) / 100
-            else: 
+            if isinstance(colorbar_size, str) and '%' in colorbar_size:  
+                size_value = float(colorbar_size. rstrip('%')) / 100
+            else:  
                 size_value = 0.03
             cbar_kws['fraction'] = size_value
     
@@ -951,7 +1050,7 @@ def plot_annotated_heatmap(
         cbar = ax.collections[0]. colorbar
         
         # Customize colorbar label
-        if colorbar_label:
+        if colorbar_label: 
             cbar.set_label(colorbar_label,
                           fontsize=font_size. get('cbar_label', font_size['label']),
                           rotation=90 if colorbar_orientation == 'vertical' else 0,
@@ -964,15 +1063,15 @@ def plot_annotated_heatmap(
         cbar.outline.set_linewidth(0.5)
         cbar.outline.set_edgecolor('black')
     
-    # Customize tick labels
+    # Customize tick labels with custom labels if provided
     ax.set_xticklabels(
-        data.columns,
+        xticklabels,
         rotation=xticklabels_rotation,
         ha='right',
         fontsize=font_size['ticks_label']
     )
     ax.set_yticklabels(
-        data.index,
+        yticklabels,
         rotation=yticklabels_rotation,
         fontsize=font_size['ticks_label']
     )
@@ -986,7 +1085,7 @@ def plot_annotated_heatmap(
     ylim = ax.get_ylim()
     
     # Get heatmap dimensions
-    n_rows = len(data. index)
+    n_rows = len(data.index)
     n_cols = len(data.columns)
     heatmap_width = xlim[1] - xlim[0]
     heatmap_height = ylim[1] - ylim[0]
@@ -1026,7 +1125,7 @@ def plot_annotated_heatmap(
         total_row_patch_width = sum(row_patch_width) + row_patch_spacing * (len(row_patch_width) - 1)
     
     total_col_patch_height = 0
-    if col_annotation_col is not None and col_palette is not None:
+    if col_annotation_col is not None and col_palette is not None:  
         total_col_patch_height = sum(col_patch_height) + col_patch_spacing * (len(col_patch_height) - 1)
     
     # Calculate automatic tick padding based on patch dimensions
@@ -1052,14 +1151,14 @@ def plot_annotated_heatmap(
             
             # Calculate padding with ratio and base
             tick_pad_y = base_tick_pad + (patch_width_points * tick_pad_ratio)
-        elif tick_pad_y is None: 
+        elif tick_pad_y is None:  
             tick_pad_y = base_tick_pad
         
         # For x-axis (column patches): height in data coords -> points
         if tick_pad_x is None and total_col_patch_height > 0:
             # Calculate height in inches based on figure size and axis position
             bbox = ax.get_position()
-            ax_height_inches = bbox. height * figsize[1]
+            ax_height_inches = bbox.height * figsize[1]
             
             # Data units per inch
             data_per_inch_y = heatmap_height / ax_height_inches
@@ -1072,11 +1171,11 @@ def plot_annotated_heatmap(
             
             # Calculate padding with ratio and base
             tick_pad_x = base_tick_pad + (patch_height_points * tick_pad_ratio)
-        elif tick_pad_x is None:
+        elif tick_pad_x is None: 
             tick_pad_x = base_tick_pad
     else:
         # Use manual padding or defaults
-        if tick_pad_x is None: 
+        if tick_pad_x is None:
             tick_pad_x = 20
         if tick_pad_y is None:
             tick_pad_y = 20
@@ -1095,7 +1194,7 @@ def plot_annotated_heatmap(
     legend_dict = {}
     
     # Add patches for rows (left side) - multiple annotation columns
-    if row_annotations is not None and row_annotation_col is not None and row_palette is not None: 
+    if row_annotations is not None and row_annotation_col is not None and row_palette is not None:  
         for annot_idx in range(len(row_annotation_col)):
             # Calculate starting position for this annotation
             # Start from leftmost and move right for each annotation
@@ -1115,12 +1214,12 @@ def plot_annotated_heatmap(
                     clip_on=False,
                     zorder=-1
                 )
-                ax.add_patch(rect)
+                ax. add_patch(rect)
             
             # Create legend for this row annotation
             legend_elements_row = [
                 Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
-                for category, color in row_palette[annot_idx]. items()
+                for category, color in row_palette[annot_idx].items()
             ]
             legend_dict[f'row_{annot_idx}'] = {
                 'handles': legend_elements_row,
@@ -1162,6 +1261,50 @@ def plot_annotated_heatmap(
                 'n_items': len(legend_elements_col)
             }
     
+    # Add horizontal separation lines based on row categories (multiple levels)
+    if row_separation_col is not None and row_annotations is not None:
+        for sep_idx, sep_col in enumerate(row_separation_col):
+            # Get the category values for each row in order
+            row_categories = row_annotations[sep_col].values
+            
+            # Find positions where category changes
+            for i in range(1, len(row_categories)):
+                if row_categories[i] != row_categories[i-1]:
+                    # Draw horizontal line at the boundary
+                    ax.axhline(
+                        y=i,
+                        xmin=0,
+                        xmax=1,
+                        color=row_separation_color[sep_idx],
+                        linewidth=row_separation_linewidth[sep_idx],
+                        linestyle=row_separation_linestyle[sep_idx],
+                        alpha=row_separation_alpha[sep_idx],
+                        clip_on=False,
+                        zorder=10 + sep_idx  # Higher zorder for first level
+                    )
+    
+    # Add vertical separation lines based on column categories (multiple levels)
+    if col_separation_col is not None and col_annotations is not None: 
+        for sep_idx, sep_col in enumerate(col_separation_col):
+            # Get the category values for each column in order
+            col_categories = col_annotations[sep_col].values
+            
+            # Find positions where category changes
+            for j in range(1, len(col_categories)):
+                if col_categories[j] != col_categories[j-1]:
+                    # Draw vertical line at the boundary
+                    ax. axvline(
+                        x=j,
+                        ymin=0,
+                        ymax=1,
+                        color=col_separation_color[sep_idx],
+                        linewidth=col_separation_linewidth[sep_idx],
+                        linestyle=col_separation_linestyle[sep_idx],
+                        alpha=col_separation_alpha[sep_idx],
+                        clip_on=False,
+                        zorder=10 + sep_idx  # Higher zorder for first level
+                    )
+    
     # Add value legend if specified (only for qualitative heatmaps)
     if value_legend_labels is not None and heatmap_type == 'qualitative':
         # Get colormap colors
@@ -1171,7 +1314,7 @@ def plot_annotated_heatmap(
             colormap = cmap
         
         # Create legend elements based on value_legend_labels
-        if 'custom' in value_legend_labels: 
+        if 'custom' in value_legend_labels:  
             # Custom legend elements provided
             legend_elements_value = value_legend_labels['custom']
         else:
@@ -1186,12 +1329,12 @@ def plot_annotated_heatmap(
         legend_dict['value'] = {
             'handles': legend_elements_value,
             'title': value_legend_title,
-            'n_items':  len(legend_elements_value)
+            'n_items': len(legend_elements_value)
         }
     
     # Determine legend order
     if legend_order is None:
-        # Default order: all row legends, then all col legends, then value
+        # Default order:  all row legends, then all col legends, then value
         legend_order = []
         if row_annotation_col is not None:
             legend_order.extend([f'row_{i}' for i in range(len(row_annotation_col))])
@@ -1207,7 +1350,7 @@ def plot_annotated_heatmap(
         # Estimate legend heights based on number of items
         # Each item is approximately 0.03 in figure coordinates, title adds 0.04
         legend_heights = []
-        for key in legends_to_plot: 
+        for key in legends_to_plot:  
             n_items = legend_dict[key]['n_items']
             estimated_height = 0.04 + (n_items * 0.03)  # title + items
             legend_heights.append(estimated_height)
@@ -1221,7 +1364,7 @@ def plot_annotated_heatmap(
             start_y = 0.5 + (total_legend_height / 2)
         elif legend_alignment == 'bottom':
             start_y = 0.05 + total_legend_height
-        else:
+        else: 
             start_y = 0.95  # default to top
         
         # Calculate positions for each legend
@@ -1236,7 +1379,7 @@ def plot_annotated_heatmap(
             start_y = 0.95
         elif legend_alignment == 'center':
             start_y = 0.5
-        elif legend_alignment == 'bottom': 
+        elif legend_alignment == 'bottom':
             start_y = 0.05 + (len(legends_to_plot) - 1) * legend_spacing
         else:
             start_y = 0.95
@@ -1251,7 +1394,7 @@ def plot_annotated_heatmap(
             legend_bbox_x = legend_bbox_x - 0.15  # Move legends further left
     
     # Set bbox_to_anchor based on position
-    if legend_position == 'right': 
+    if legend_position == 'right':  
         legend_loc = 'center left'
         bbox_x = legend_bbox_x
     elif legend_position == 'left':
