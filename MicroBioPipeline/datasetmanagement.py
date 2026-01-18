@@ -770,7 +770,9 @@ def coord_array_to_df(result,
         pval_adj_df = None
     
     # Fill in the DataFrames with progress bar
-    iterator = tqdm(result, desc="Converting to matrices", unit="pairs") if show_progress else result
+    import sys
+    iterator = tqdm(result, file=sys.stderr,
+                    desc="Converting to matrices", unit="pairs") if show_progress else result
     
     for row in iterator: 
         i = int(row[0])

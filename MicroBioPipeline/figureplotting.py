@@ -603,6 +603,7 @@ def plot_annotated_heatmap(
     row_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
     col_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
     figsize: Tuple[float, float] = (10, 14),
+    square: bool = False,
     cmap: Union[str, LinearSegmentedColormap] = 'Blues',
     font_scale: float = 13,
     title: str = 'Annotated Heatmap',
@@ -830,6 +831,8 @@ def plot_annotated_heatmap(
     col_separation_alpha : float or list of float, default 1.0
         Alpha (transparency) value(s) for vertical separation lines (0.0-1.0).
         If list, must match length of col_separation_col. 0.0 is fully transparent, 1.0 is fully opaque.
+    square : bool, default False
+        If True, set heatmap cells to be square-shaped.
     
     Returns
     -------
@@ -1041,7 +1044,8 @@ def plot_annotated_heatmap(
         vmin=vmin,
         vmax=vmax,
         center=center,
-        robust=robust
+        robust=robust,
+        square=True if square else False
     )
     
     # Customize colorbar if shown
