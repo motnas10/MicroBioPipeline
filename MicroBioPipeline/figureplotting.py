@@ -1440,3 +1440,693 @@ def plot_annotated_heatmap(
         plt.savefig(save_path, dpi=dpi, bbox_inches='tight', transparent=False)
     
     return fig, ax
+
+# -----------------------------------------------------------------------
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle, Patch
+from typing import Optional, Dict, Tuple, Union, Literal, List, Callable
+
+
+def plot_annotated_barplot(
+    data: pd.Series,
+    annotations: Optional[pd.DataFrame] = None,
+    palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
+    figsize: Optional[Tuple[float, float]] = None,
+    orientation: Literal['horizontal', 'vertical'] = 'horizontal',
+    sort_by: Optional[Literal['value', 'index', 'absolute']] = 'value',
+    ascending: bool = True,
+    top_n: Optional[int] = None,
+    title: str = 'Annotated Barplot',
+    xlabel: Optional[str] = None,
+    ylabel: Optional[str] = None,
+    bar_colors: Optional[Union[str, List[str], Dict]] = None,
+    bar_alpha: float = 0.7,
+    bar_edgecolor: str = 'black',
+    bar_linewidth:   float = 0.5,
+    color_by_sign: bool = False,
+    positive_color: str = '#e54c38',
+    negative_color: str = '#51607f',
+    reference_line: Optional[float] = None,
+    reference_line_color: str = 'black',
+    reference_line_width: float = 1.5,
+    reference_line_style: str = '-',
+    patch_width: Optional[Union[float, List[float]]] = None,
+    patch_auto_width: bool = True,
+    patch_width_ratio: float = 0.02,
+    patch_spacing: float = 0.005,
+    annotation_col: Optional[Union[str, List[str]]] = None,
+    legend_title: Union[str, List[str]] = 'Categories',
+    legend_position:  Literal['best', 'upper right', 'upper left', 'lower right', 
+                             'lower left', 'right', 'center left', 'center right', 
+                             'lower center', 'upper center', 'center'] = 'best',
+    legend_bbox_to_anchor:  Optional[Tuple[float, float]] = None,
+    show_values: bool = False,
+    value_format: str = '. 2f',
+    value_offset_ratio: float = 0.01,
+    significance_values: Optional[Union[pd.Series, Dict, List]] = None,
+    significance_thresholds: Optional[List[Tuple[float, str]]] = None,
+    significance_symbols: Optional[Dict[str, str]] = None,
+    significance_func: Optional[Callable] = None,
+    show_ns:  bool = False,
+    significance_offset_ratio: float = 0.01,
+    significance_fontsize: Optional[float] = None,
+    significance_color: Optional[Union[str, Literal['bar']]] = 'bar',
+    ticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
+    ticklabels_size: Optional[float] = None,
+    symmetric_axis: bool = False,
+    axis_padding_ratio: float = 0.3,
+    grid:   bool = True,
+    grid_axis: Literal['both', 'x', 'y'] = 'x',
+    grid_alpha: float = 0.3,
+    grid_linestyle:  str = '--',
+    show_spines: Union[bool, Dict[str, bool]] = False,
+    font_scale: float = 5,
+    font_size_func: Optional[callable] = None,
+    save_path: Optional[str] = None,
+    dpi: int = 600,
+    patch_spacing_list: Optional[List[float]] = None
+) -> Tuple[plt.Figure, plt. Axes]:
+    """
+    Create an annotated barplot with colored patches for category annotations.
+    Supports both horizontal and vertical orientations.   
+    Tick labels and annotation patches are always placed on the OPPOSITE side of the bars.
+    
+    Parameters
+    ----------
+    data : pd. Series
+        Data to plot as bars.  Index contains labels, values are bar heights/lengths.
+    annotations : pd.DataFrame, optional
+        DataFrame with bar annotations (index should match data. index).
+        Can contain multiple columns for different annotation types.
+    palette : dict or list of dict, optional
+        Single dictionary or list of dictionaries mapping categories to colors.
+        If list, must match length of annotation_col.
+    figsize : tuple, optional
+        Figure size (width, height) in inches.  If None, calculated automatically.
+    orientation : str, default 'horizontal'
+        Orientation of bars:   'horizontal' or 'vertical'. 
+    sort_by : str, optional
+        How to sort bars:   'value' (by values), 'index' (by index), 
+        'absolute' (by absolute values), or None (no sorting).
+    ascending : bool, default True
+        Sort order if sort_by is specified.
+    top_n : int, optional
+        Show only top N bars after sorting (None = show all).
+    title : str, default 'Annotated Barplot'
+        Title for the plot.
+    xlabel : str, optional
+        Label for x-axis.  If None, auto-generated based on orientation.
+    ylabel : str, optional
+        Label for y-axis.   If None, auto-generated based on orientation.
+    bar_colors :   str, list, or dict, optional
+        Colors for bars.  Can be:
+        - Single color (str): all bars same color
+        - List of colors:   one per bar
+        - Dict mapping indices to colors
+        Ignored if color_by_sign=True.  
+    bar_alpha : float, default 0.7
+        Transparency of bars (0.0-1.0).
+    bar_edgecolor : str, default 'black'
+        Color of bar edges.
+    bar_linewidth : float, default 0.5
+        Width of bar edges.  
+    color_by_sign :   bool, default False
+        If True, color bars by sign (positive vs negative).
+    positive_color :   str, default '#e54c38'
+        Color for positive values (when color_by_sign=True).
+    negative_color :  str, default '#51607f'
+        Color for negative values (when color_by_sign=True).
+    reference_line : float, optional
+        Value at which to draw a reference line (e.g., 0 for fold changes).
+    reference_line_color : str, default 'black'
+        Color of reference line.
+    reference_line_width : float, default 1.5
+        Width of reference line.
+    reference_line_style : str, default '-'
+        Style of reference line ('-', '--', '-.', ':').
+    patch_width : float or list of float, optional
+        Manual width(s) of annotation patches.  If None and auto is True, calculated automatically.
+        If list, must match length of annotation_col.
+    patch_auto_width : bool, default True
+        Automatically calculate patch width based on axis dimensions.
+    patch_width_ratio : float, default 0.02
+        Ratio of axis range for patches (used when auto width is True).
+    patch_spacing : float, default 0.005
+        Spacing between patches and axis/labels as ratio of axis range.
+    annotation_col : str or list of str, optional
+        Column name(s) in annotations DataFrame to use for coloring.
+        If list, creates multiple annotation patches per bar.
+    legend_title :  str or list of str, default 'Categories'
+        Title(s) for annotation legend(s).
+        If list, must match length of annotation_col.  
+    legend_position : str, default 'best'
+        Position of legend.   
+    legend_bbox_to_anchor :   tuple, optional
+        Bbox to anchor for legend positioning.  
+    show_values : bool, default False
+        Whether to show value labels at the end of bars.
+    value_format : str, default '. 2f'
+        Format string for value labels.
+    value_offset_ratio : float, default 0.01
+        Offset for value labels as ratio of axis range.
+    significance_values : pd.Series, dict, or list, optional
+        Significance values (e.g., p-values) for each bar.
+        Can be:
+        - pd.Series with same index as data
+        - Dict mapping indices to significance values
+        - List with same length as data
+    significance_thresholds : list of tuples, optional
+        Thresholds for significance levels as (threshold, symbol) tuples.
+        Default: [(1e-4, '****'), (1e-3, '***'), (1e-2, '**'), (0.05, '*')]
+        Thresholds are evaluated in order (most to least significant).
+    significance_symbols : dict, optional
+        Custom mapping of threshold labels to display symbols.
+        Overrides symbols from significance_thresholds.
+    significance_func : callable, optional
+        Custom function to convert significance values to symbols.
+        Should accept a float and return a string.
+        If provided, overrides significance_thresholds. 
+    show_ns : bool, default False
+        Whether to show 'ns' (not significant) for non-significant values.
+    significance_offset_ratio : float, default 0.01
+        Offset for significance symbols from bar ends as ratio of axis range.
+    significance_fontsize : float, optional
+        Font size for significance symbols.   If None, uses 'text' size from font_scale.
+    significance_color : str or 'bar', default 'bar'
+        Color for significance symbols.  If 'bar', uses the same color as the bar.
+    ticklabels :  pd.Series, list, or np.ndarray, optional
+        Custom labels for bars.  If None, uses data. index.
+        Must have the same length as data (after filtering/sorting).
+    ticklabels_size : float, optional
+        Font size for tick labels.  If None, uses default from font_scale.
+    symmetric_axis : bool, default False
+        Make value axis symmetric around reference_line (useful for fold changes).
+    axis_padding_ratio : float, default 0.3
+        Padding at the end of value axis as ratio of data range.
+    grid : bool, default True
+        Whether to show grid.   
+    grid_axis : str, default 'x'
+        Which axis to show grid:   'x', 'y', or 'both'.
+    grid_alpha : float, default 0.3
+        Transparency of grid lines.
+    grid_linestyle : str, default '--'
+        Style of grid lines.
+    show_spines :   bool or dict, default False
+        Whether to show axis spines.  Can be bool or dict with keys 'top', 'right', 'bottom', 'left'.
+    font_scale : float, default 8
+        Scale factor for font sizes.
+    font_size_func : callable, optional
+        Custom function to calculate font sizes.  Should accept (width, height, unit, scale)
+        and return a dict with keys:   'ticks_label', 'label', 'legend', 'title', 'text'.
+    save_path : str, optional
+        Path to save the figure.  
+    dpi : int, default 600
+        DPI for saved figure.
+    patch_spacing_list : list of float, optional
+        Custom spacing for each annotation patch level.  If None, uses patch_spacing for all.
+    
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The figure object.  
+    ax : matplotlib.axes. Axes
+        The axes object. 
+    
+    Examples
+    --------
+    >>> # With p-values
+    >>> data = pd.Series([2.5, -1.3, 3.1, -0.5], index=['A', 'B', 'C', 'D'])
+    >>> pvalues = pd.Series([0.001, 0.05, 0.0001, 0.2], index=['A', 'B', 'C', 'D'])
+    >>> fig, ax = plot_annotated_barplot(
+    ...     data=data,
+    ...     significance_values=pvalues,
+    ...     color_by_sign=True,
+    ...     reference_line=0
+    ... )
+    
+    >>> # With custom significance function
+    >>> def custom_sig(pval):
+    ...     if pval < 0.001:
+    ...         return '†††'
+    ...     elif pval < 0.01:
+    ...         return '††'
+    ...     elif pval < 0.05:
+    ...         return '†'
+    ...     else:
+    ...         return 'ns'
+    >>> 
+    >>> fig, ax = plot_annotated_barplot(
+    ...     data=data,
+    ...     significance_values=pvalues,
+    ...     significance_func=custom_sig,
+    ...     show_ns=True
+    ... )
+    """
+    
+    # Process data
+    plot_data = data.copy()
+    
+    # Sort data if requested
+    if sort_by == 'value':
+        plot_data = plot_data.sort_values(ascending=ascending)
+    elif sort_by == 'absolute':
+        plot_data = plot_data.iloc[np.abs(plot_data. values).argsort()]
+        if not ascending:
+            plot_data = plot_data.iloc[::-1]
+    elif sort_by == 'index':
+        plot_data = plot_data.sort_index(ascending=ascending)
+    
+    # Filter top N if requested
+    if top_n is not None:
+        plot_data = plot_data.iloc[-top_n: ] if ascending else plot_data.iloc[: top_n]
+    
+    # Get bar labels and values
+    bar_labels = plot_data.index.values
+    bar_values = plot_data.values
+    n_bars = len(bar_labels)
+    
+    # Process significance values
+    if significance_values is not None:
+        if isinstance(significance_values, pd. Series):
+            sig_vals = significance_values.loc[bar_labels]. values
+        elif isinstance(significance_values, dict):
+            sig_vals = [significance_values.get(label, np.nan) for label in bar_labels]
+        else:
+            sig_vals = list(significance_values)
+            assert len(sig_vals) == n_bars, "significance_values must match data length"
+    else:
+        sig_vals = None
+    
+    # Setup default significance thresholds
+    if significance_thresholds is None:
+        significance_thresholds = [
+            (1e-4, '****'),
+            (1e-3, '***'),
+            (1e-2, '**'),
+            (0.05, '*')
+        ]
+    
+    # Create significance conversion function
+    if significance_func is None:
+        def default_sig_func(val):
+            if pd.isna(val):
+                return ''
+            for threshold, symbol in significance_thresholds:
+                if val <= threshold:
+                    return symbol
+            return 'ns' if show_ns else ''
+        
+        sig_func = default_sig_func
+    else:
+        sig_func = significance_func
+    
+    # Process custom tick labels
+    if ticklabels is not None:
+        if isinstance(ticklabels, pd.Series):
+            ticklabels = ticklabels.loc[bar_labels].values
+        else:
+            ticklabels = list(ticklabels)
+        assert len(ticklabels) == n_bars, "ticklabels must match data length"
+    else:
+        ticklabels = bar_labels
+    
+    # Convert annotation parameters to lists
+    if annotation_col is not None and not isinstance(annotation_col, list):
+        annotation_col = [annotation_col]
+    if palette is not None and not isinstance(palette, list):
+        palette = [palette]
+    if isinstance(legend_title, str):
+        legend_title = [legend_title]
+    if patch_width is not None and not isinstance(patch_width, list):
+        patch_width = [patch_width]
+    
+    # Validate annotations
+    if annotation_col is not None:
+        n_annots = len(annotation_col)
+        if palette is not None:
+            assert len(palette) == n_annots, "palette must match annotation_col length"
+        if len(legend_title) == 1:
+            legend_title = legend_title * n_annots
+        assert len(legend_title) == n_annots, "legend_title must match annotation_col length"
+        if patch_width is not None:
+            if len(patch_width) == 1:
+                patch_width = patch_width * n_annots
+            assert len(patch_width) == n_annots, "patch_width must match annotation_col length"
+        
+        # Ensure annotations match data
+        if annotations is not None:
+            annotations = annotations.loc[bar_labels]
+    
+    # Setup patch spacing
+    if patch_spacing_list is None:
+        patch_spacing_list = [patch_spacing] * (len(annotation_col) if annotation_col else 1)
+    
+    # Calculate figure size
+    if figsize is None:
+        if orientation == 'horizontal':
+            figsize = (14, max(6, n_bars * 0.6))
+        else:
+            figsize = (max(8, n_bars * 0.6), 10)
+    
+    # Calculate font sizes
+    if font_size_func is not None:
+        font_size = font_size_func(figsize[0], figsize[1], 'in', scale=font_scale, type='number')
+    else:
+        # Default font sizes
+        font_size = {
+            'ticks_label':  8,
+            'label': 10,
+            'legend': 9,
+            'title': 12,
+            'text': 9
+        }
+    
+    # Override tick label size if specified
+    if ticklabels_size is not None:  
+        font_size['ticks_label'] = ticklabels_size
+    
+    # Set significance font size
+    if significance_fontsize is None:
+        significance_fontsize = font_size['text']
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Determine bar colors
+    if color_by_sign:
+        colors = [negative_color if x < 0 else positive_color for x in bar_values]
+    elif bar_colors is not None:
+        if isinstance(bar_colors, str):
+            colors = [bar_colors] * n_bars
+        elif isinstance(bar_colors, dict):
+            colors = [bar_colors.get(label, 'gray') for label in bar_labels]
+        else:
+            colors = bar_colors
+    else:
+        colors = ['steelblue'] * n_bars
+    
+    # Create barplot
+    positions = np.arange(n_bars)
+    if orientation == 'horizontal':
+        bars = ax.barh(positions, bar_values, height=1,
+                       color=colors, alpha=bar_alpha,
+                       edgecolor=bar_edgecolor, linewidth=bar_linewidth)
+        value_axis = 'x'
+        category_axis = 'y'
+    else:
+        bars = ax.bar(positions, bar_values, width=1,
+                      color=colors, alpha=bar_alpha,
+                      edgecolor=bar_edgecolor, linewidth=bar_linewidth)
+        value_axis = 'y'
+        category_axis = 'x'
+    
+    # Set axis limits with padding
+    if symmetric_axis and reference_line is not None:  
+        max_abs_val = np.abs(bar_values).max()
+        axis_limit = max_abs_val * (1 + axis_padding_ratio)
+        if orientation == 'horizontal':
+            ax.set_xlim(-axis_limit, axis_limit)
+            axis_range = 2 * axis_limit
+        else:
+            ax.set_ylim(-axis_limit, axis_limit)
+            axis_range = 2 * axis_limit
+    else:
+        val_min, val_max = bar_values.min(), bar_values.max()
+        val_range = val_max - val_min
+        padding = val_range * axis_padding_ratio
+        
+        # Extend limits to include reference line if specified
+        if reference_line is not None:
+            val_min = min(val_min, reference_line)
+            val_max = max(val_max, reference_line)
+        
+        if orientation == 'horizontal':
+            ax.set_xlim(val_min - padding, val_max + padding)
+            axis_range = val_max - val_min + 2 * padding
+        else:
+            ax.set_ylim(val_min - padding, val_max + padding)
+            axis_range = val_max - val_min + 2 * padding
+    
+    # Calculate patch dimensions
+    if annotation_col is not None and annotations is not None and palette is not None:
+        n_annots = len(annotation_col)
+        if patch_width is None:
+            patch_width = [None] * n_annots
+        
+        for idx in range(n_annots):
+            if patch_auto_width and patch_width[idx] is None:   
+                calculated_width = axis_range * patch_width_ratio
+                patch_width[idx] = max(calculated_width, axis_range * 0.01)
+            elif patch_width[idx] is None:
+                patch_width[idx] = axis_range * 0.02
+        
+        # Calculate total patch width including spacing
+        total_patch_width = sum(patch_width) + sum([patch_spacing_list[i] * axis_range for i in range(n_annots - 1)])
+        
+        # Add annotation patches - ALWAYS on opposite side of bars
+        for annot_idx in range(n_annots):
+            # Calculate starting position for this annotation (from outermost to innermost)
+            start_offset = sum(patch_width[:annot_idx]) + sum([patch_spacing_list[i] * axis_range for i in range(annot_idx)])
+            
+            col_name = annotation_col[annot_idx]
+            for i, bar_label in enumerate(bar_labels):
+                category = annotations.loc[bar_label, col_name]
+                color = palette[annot_idx]. get(category, 'gray')
+                
+                bar_val = bar_values[i]
+                
+                if orientation == 'horizontal':
+                    # Patch on OPPOSITE side of bar
+                    if bar_val >= 0:
+                        # Bar goes right, patch on left
+                        patch_x = -(total_patch_width - start_offset + patch_spacing_list[0] * axis_range)
+                    else:
+                        # Bar goes left, patch on right
+                        patch_x = patch_spacing_list[0] * axis_range + start_offset
+                    
+                    rect = Rectangle(
+                        (patch_x, i - 0.4),
+                        patch_width[annot_idx],
+                        0.8,
+                        facecolor=color,
+                        edgecolor=bar_edgecolor,
+                        linewidth=bar_linewidth,
+                        alpha=0.8,
+                        clip_on=False,
+                        zorder=10
+                    )
+                else:
+                    # Vertical orientation - patch on OPPOSITE side of bar
+                    if bar_val >= 0:
+                        # Bar goes up, patch on bottom
+                        patch_y = -(total_patch_width - start_offset + patch_spacing_list[0] * axis_range)
+                    else:
+                        # Bar goes down, patch on top
+                        patch_y = patch_spacing_list[0] * axis_range + start_offset
+                    
+                    rect = Rectangle(
+                        (i - 0.4, patch_y),
+                        1,
+                        patch_width[annot_idx],
+                        facecolor=color,
+                        edgecolor=bar_edgecolor,
+                        linewidth=bar_linewidth,
+                        clip_on=False,
+                        zorder=10
+                    )
+                
+                ax.add_patch(rect)
+        
+        # Calculate label offset (beyond patches)
+        label_offset = total_patch_width + 2 * patch_spacing_list[0] * axis_range
+    else:
+        label_offset = patch_spacing * axis_range
+    
+    # Add tick labels - ALWAYS on opposite side of bars
+    if orientation == 'horizontal':
+        ax.set_yticks(positions)
+        
+        for i, (label, val) in enumerate(zip(ticklabels, bar_values)):
+            # Label on OPPOSITE side of bar
+            if val >= 0:
+                # Bar goes right, label on left
+                x_pos = -label_offset
+                ha = 'right'
+            else:
+                # Bar goes left, label on right
+                x_pos = label_offset
+                ha = 'left'
+            
+            ax.text(x_pos, i, f" {label} ",
+                   fontsize=font_size['ticks_label'], ha=ha, va='center', zorder=11)
+        
+        ax.set_yticklabels([])
+        ax.tick_params(axis='y', length=0)  # Hide tick marks
+    else:
+        ax.set_xticks(positions)
+        
+        for i, (label, val) in enumerate(zip(ticklabels, bar_values)):
+            # Label on OPPOSITE side of bar
+            if val >= 0:
+                # Bar goes up, label on bottom
+                y_pos = -label_offset
+                va = 'top'
+            else:
+                # Bar goes down, label on top
+                y_pos = label_offset
+                va = 'bottom'
+            
+            ax.text(i, y_pos, f" {label} ",
+                   fontsize=font_size['ticks_label'], ha='center', va=va, 
+                   rotation=45, zorder=11)
+        
+        ax.set_xticklabels([])
+    
+    # Add significance symbols at bar ends
+    if sig_vals is not None:
+        sig_offset = axis_range * significance_offset_ratio
+        
+        for i, (val, sig_val) in enumerate(zip(bar_values, sig_vals)):
+            symbol = sig_func(sig_val)
+            
+            if symbol and symbol != 'ns' or (symbol == 'ns' and show_ns):
+                # Determine symbol color
+                if significance_color == 'bar': 
+                    sym_color = colors[i]
+                else: 
+                    sym_color = significance_color
+                
+                if orientation == 'horizontal':
+                    # Position symbol at bar end
+                    if val >= 0:
+                        x_pos = val + sig_offset
+                        ha = 'left'
+                    else:
+                        x_pos = val - sig_offset
+                        ha = 'right'
+                    
+                    ax.text(x_pos, i, symbol,
+                           fontsize=significance_fontsize, ha=ha, va='center',
+                           color=sym_color, zorder=12)
+                else: 
+                    # Vertical orientation
+                    if val >= 0:
+                        y_pos = val + sig_offset
+                        va = 'bottom'
+                    else:
+                        y_pos = val - sig_offset
+                        va = 'top'
+                    
+                    ax.text(i, y_pos, symbol,
+                           fontsize=significance_fontsize, ha='center', va=va,
+                           color=sym_color, zorder=12)
+    
+    # Add value labels at bar ends if requested
+    if show_values:  
+        value_offset = axis_range * value_offset_ratio
+        
+        # Adjust offset if significance symbols are shown
+        if sig_vals is not None:
+            value_offset += axis_range * significance_offset_ratio * 2
+        
+        for i, (val, bar) in enumerate(zip(bar_values, bars)):
+            if orientation == 'horizontal':
+                if val >= 0:
+                    x_pos = val + value_offset
+                    ha = 'left'
+                else:
+                    x_pos = val - value_offset
+                    ha = 'right'
+                ax.text(x_pos, i, f"{val:{value_format}}",
+                       fontsize=font_size['text'], ha=ha, va='center',
+                       color=colors[i])
+            else:
+                if val >= 0:
+                    y_pos = val + value_offset
+                    va = 'bottom'
+                else:
+                    y_pos = val - value_offset
+                    va = 'top'
+                ax.text(i, y_pos, f"{val:{value_format}}",
+                       fontsize=font_size['text'], ha='center', va=va,
+                       color=colors[i])
+    
+    # Add reference line
+    if reference_line is not None:
+        if orientation == 'horizontal':
+            ax.axvline(x=reference_line, color=reference_line_color,
+                      linestyle=reference_line_style, linewidth=reference_line_width,
+                      zorder=5)
+        else:
+            ax.axhline(y=reference_line, color=reference_line_color,
+                      linestyle=reference_line_style, linewidth=reference_line_width,
+                      zorder=5)
+    
+    # Add grid
+    if grid:  
+        ax.grid(axis=grid_axis, alpha=grid_alpha, linestyle=grid_linestyle, zorder=0)
+    
+    # Set axis labels
+    if xlabel is None:
+        xlabel = 'Value' if orientation == 'horizontal' else 'Category'
+    if ylabel is None:  
+        ylabel = 'Category' if orientation == 'horizontal' else 'Value'
+    
+    ax.set_xlabel(xlabel, fontsize=font_size['label'])
+    ax.set_ylabel(ylabel, fontsize=font_size['label'])
+    
+    # Set title
+    ax.set_title(title, fontsize=font_size['title'], pad=20)
+    
+    # Configure spines
+    if isinstance(show_spines, bool):
+        for spine in ax.spines.values():
+            spine.set_visible(show_spines)
+    else:
+        for spine_name, visible in show_spines.items():
+            if spine_name in ax.spines:
+                ax.spines[spine_name].set_visible(visible)
+    
+    # Add legend for annotations
+    if annotation_col is not None and annotations is not None and palette is not None:
+        all_handles = []
+        
+        for annot_idx in range(len(annotation_col)):
+            col_name = annotation_col[annot_idx]
+            present_categories = set(annotations[col_name].values)
+            
+            legend_elements = [
+                Patch(facecolor=color, edgecolor=bar_edgecolor, 
+                     linewidth=bar_linewidth, label=category)
+                for category, color in palette[annot_idx].items()
+                if category in present_categories
+            ]
+            
+            all_handles.extend(legend_elements)
+        
+        if all_handles:
+            if legend_bbox_to_anchor:  
+                ax.legend(handles=all_handles, loc=legend_position,
+                         bbox_to_anchor=legend_bbox_to_anchor,
+                         fontsize=font_size['legend'],
+                         title_fontsize=font_size['legend_title'],
+                         frameon=True
+                         )
+            else:
+                ax. legend(handles=all_handles, loc=legend_position,
+                         fontsize=font_size['legend'],
+                         title_fontsize=font_size['legend_title'],
+                         frameon=True
+                         )
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save figure
+    if save_path is not None:
+        plt.savefig(save_path, dpi=dpi, bbox_inches='tight', transparent=False)
+    
+    return fig, ax
