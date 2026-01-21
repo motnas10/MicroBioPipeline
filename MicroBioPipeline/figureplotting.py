@@ -1793,7 +1793,7 @@ def plot_annotated_barplot(
     
     # Calculate font sizes
     if font_size_func is not None:
-        font_size = font_size_func(figsize[0], figsize[1], 'in', scale=font_scale, type='number')
+        font_size = font_size_func(figsize[0], figsize[1], 'in', font_scale, 'number')
     else:
         # Default font sizes
         font_size = {
