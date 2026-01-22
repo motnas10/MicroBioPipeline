@@ -346,7 +346,7 @@ class MultiplexCommunityOptimizer:
                 raise ValueError(f"Layer {i} has different node set than Layer 0.")
         
         self.layers = layers
-        self. node_scores = node_scores or {}
+        self.node_scores = node_scores or {}
         self.layer_names = layer_names or [f"Layer {i}" for i in range(len(layers))]
         
         # Initialize weights
@@ -572,7 +572,7 @@ class MultiplexCommunityOptimizer:
                 min_weight=min_weight
             )
             
-            layers. append(G)
+            layers.append(G)
         
         return layers
     
