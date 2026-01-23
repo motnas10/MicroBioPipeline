@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import networkx as nx
+from tqdm import tqdm
 try:
     import igraph as ig
     IGRAPH_AVAILABLE = True
@@ -42,6 +43,7 @@ def project_to_simplex(v: np.ndarray) -> np.ndarray:
     np.ndarray
         Closest point on the simplex to v.
     """
+    print('[INFO] Projecting to simplex...')
     v = np.asarray(v, dtype=float)
     n = v.size
     u = np.sort(v)[::-1]
@@ -489,8 +491,8 @@ class MultiplexCommunityOptimizer:
             if score_sheet not in all_sheets:
                 raise ValueError(f"Score sheet '{score_sheet}' not found in Excel file.")
             
-            df_scores = pd.read_excel(filepath, sheet_name=score_sheet)
-            if node_column not in df_scores. columns or score_column not in df_scores. columns:
+            df_scores = pd.read_excel(filepath, sheet_name=score_sheet, header=0)
+            if node_column not in df_scores.columns or score_column not in df_scores.columns:
                 raise ValueError(
                     f"Score sheet must contain '{node_column}' and '{score_column}' columns."
                 )
@@ -531,7 +533,7 @@ class MultiplexCommunityOptimizer:
     
     @staticmethod
     def _load_correlation_layers(
-        filepath:  Path,
+        filepath: Path,
         sheets: List[str],
         threshold: Optional[float],
         threshold_percentile: Optional[float],
@@ -544,7 +546,7 @@ class MultiplexCommunityOptimizer:
         node_labels = None
         
         for sheet in sheets:
-            df = pd.read_excel(filepath, sheet_name=sheet, index_col=0)
+            df = pd.read_excel(filepath, sheet_name=sheet, index_col=0, header=0)
             
             # Validate it's a square matrix
             if df.shape[0] != df.shape[1]:
@@ -572,7 +574,7 @@ class MultiplexCommunityOptimizer:
                 min_weight=min_weight
             )
             
-            layers. append(G)
+            layers.append(G)
         
         return layers
     
@@ -991,6 +993,7 @@ class MultiplexCommunityOptimizer:
         nx.Graph
             Collapsed network.
         """
+        print('[INFO] Collapsing layers into single network...')
         if weights is None:
             weights = self.weights
         else:
@@ -1076,8 +1079,9 @@ class MultiplexCommunityOptimizer:
         ...     # Custom logic
         ...     return [[0, 1, 2], [3, 4, 5]]
         >>>
-        >>> communities = optimizer. detect_communities(custom_method=my_method, threshold=0.6)
+        >>> communities = optimizer.detect_communities(custom_method=my_method, threshold=0.6)
         """
+        print('[INFO] Detecting communities...')
         if G is None:
             G = self.collapse_layers()
         
@@ -1103,6 +1107,7 @@ class MultiplexCommunityOptimizer:
     
     def _detect_spinglass(self, G:  nx.Graph, **kwargs) -> List[List[Any]]:
         """Spinglass community detection (requires igraph)."""
+        print('[INFO] Using spinglass community detection...')
         if not IGRAPH_AVAILABLE:
             raise ImportError("igraph is required for spinglass method.  Install with: pip install igraph")
         
@@ -1125,6 +1130,7 @@ class MultiplexCommunityOptimizer:
     
     def _detect_louvain(self, G: nx.Graph, **kwargs) -> List[List[Any]]: 
         """Louvain community detection."""
+        print('[INFO] Using louvain community detection...')
         try:
             import community as community_louvain
         except ImportError: 
@@ -1138,11 +1144,13 @@ class MultiplexCommunityOptimizer:
     
     def _detect_greedy_modularity(self, G: nx.Graph, **kwargs) -> List[List[Any]]: 
         """Greedy modularity optimization."""
+        print('[INFO] Using greedy modularity community detection...')
         communities_gen = nx.algorithms.community.greedy_modularity_communities(G, weight='weight', **kwargs)
         return [list(c) for c in communities_gen]
     
     def _detect_label_propagation(self, G: nx.Graph, **kwargs) -> List[List[Any]]:
         """Label propagation."""
+        print('[INFO] Using label propagation community detection...')
         communities_gen = nx.algorithms.community.label_propagation_communities(G, weight='weight', **kwargs)
         return [list(c) for c in communities_gen]
     
@@ -1211,6 +1219,7 @@ class MultiplexCommunityOptimizer:
         >>>
         >>> score = optimizer.score_communities(communities, custom_scorer=my_scorer)
         """
+        print('[INFO] Scoring communities...')
         if node_scores is None:
             node_scores = self.node_scores
         
@@ -1238,6 +1247,7 @@ class MultiplexCommunityOptimizer:
     
     def _score_r2(self, communities:  List[List[Any]], node_scores: Dict[Any, float]) -> float:
         """R² score (fraction of variance explained)."""
+        print('[INFO] Calculating R² score...')
         labels = {}
         for c, nodes in enumerate(communities):
             for u in nodes:
@@ -1264,6 +1274,7 @@ class MultiplexCommunityOptimizer:
     
     def _score_silhouette(self, communities: List[List[Any]], node_scores: Dict[Any, float]) -> float:
         """Silhouette score."""
+        print('[INFO] Calculating silhouette score...')
         from sklearn.metrics import silhouette_score
         
         labels = {}
@@ -1285,6 +1296,7 @@ class MultiplexCommunityOptimizer:
     
     def _score_modularity(self, G: nx.Graph, communities: List[List[Any]]) -> float:
         """Modularity score."""
+        print('[INFO] Calculating modularity score...')
         return float(nx.algorithms.community.modularity(G, communities, weight='weight'))
     
     def set_scoring_function(self, func: Callable) -> None:
@@ -1342,10 +1354,11 @@ class MultiplexCommunityOptimizer:
         float
             Average score across repeats.
         """
+        print('[INFO] Evaluating objective function...')
         weights = project_to_simplex(weights)
         
         vals = []
-        for i in range(repeats):
+        for i in tqdm(range(repeats), total=repeats, desc="Repeats"):
             G = self.collapse_layers(weights)
             communities = self.detect_communities(G, method=community_method, **kwargs)
             score = self.score_communities(communities, metric=scoring_metric)
@@ -1359,7 +1372,7 @@ class MultiplexCommunityOptimizer:
     def optimize(
         self,
         method: str = 'spsa',
-        iterations: int = 200,
+        iterations: int = 500,
         repeats: int = 1,
         community_method: str = 'spinglass',
         scoring_metric: str = 'r2',
@@ -1418,6 +1431,7 @@ class MultiplexCommunityOptimizer:
         ...     seed=42
         ... )
         """
+        print('[INFO] Starting optimization...')
         if method == 'spsa':
             return self._optimize_spsa(
                 iterations=iterations,
@@ -1450,7 +1464,7 @@ class MultiplexCommunityOptimizer:
     
     def _optimize_spsa(
         self,
-        iterations:  int,
+        iterations: int,
         repeats: int,
         community_method: str,
         scoring_metric: str,
@@ -1464,6 +1478,7 @@ class MultiplexCommunityOptimizer:
         **kwargs
     ) -> Tuple[np.ndarray, float]:
         """SPSA optimization."""
+        print('[INFO] Running SPSA optimization...')
         rng = np.random.default_rng(seed)
         
         m = len(self.layers)
@@ -1483,16 +1498,18 @@ class MultiplexCommunityOptimizer:
             print(f"Detection:  {community_method}, Metric: {scoring_metric}")
             print()
         
-        for t in range(1, iterations + 1):
+        for t in tqdm(range(1, iterations + 1), total=iterations, desc="Iterations"):
             delta = rng.choice([-1.0, 1.0], size=m)
             
             at = alpha / (t ** alpha_decay)
             ct = c / (t ** c_decay)
             
+            print('[INFO] Computing a_plus and a_minus...')
             a_plus = project_to_simplex(a + ct * delta)
             a_minus = project_to_simplex(a - ct * delta)
             
-            f_plus = self. objective(a_plus, repeats=repeats, community_method=community_method, scoring_metric=scoring_metric, **kwargs)
+            print('[INFO] Evaluating objective function...')
+            f_plus = self.objective(a_plus, repeats=repeats, community_method=community_method, scoring_metric=scoring_metric, **kwargs)
             f_minus = self.objective(a_minus, repeats=repeats, community_method=community_method, scoring_metric=scoring_metric, **kwargs)
             
             ghat = (f_plus - f_minus) / (2.0 * ct) * delta
@@ -1712,6 +1729,7 @@ class MultiplexCommunityOptimizer:
         print("MULTIPLEX COMMUNITY OPTIMIZER SUMMARY")
         print("=" * 70)
         print(f"\nLayers: {len(self.layers)}")
+        
         for i, name in enumerate(self.layer_names):
             G = self.layers[i]
             print(f"  {i}. {name}:  {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
