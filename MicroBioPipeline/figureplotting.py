@@ -224,7 +224,7 @@ def plot_dim_reduction(
             label_fontsize = font_sizes.get('text', 10) if font_sizes else 10
             
             # Use label_col if provided, otherwise use index
-            if label_col is not None and label_col in coords_df. columns:
+            if label_col is not None and label_col in coords_df.columns:
                 labels = coords_df[label_col]
             else:
                 labels = coords_df.index
@@ -634,6 +634,7 @@ def plot_annotated_heatmap(
     colorbar_size: str = '5%',
     colorbar_pad: float = 0.05,
     colorbar_label:  Optional[str] = None,
+    cbar_ticks: Optional[Sequence[float]] = None,
     colorbar_orientation: Optional[Literal['vertical', 'horizontal']] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
@@ -1060,6 +1061,9 @@ def plot_annotated_heatmap(
                           rotation=90 if colorbar_orientation == 'vertical' else 0,
                           labelpad=10)
         
+        if cbar_ticks is not None:
+            cbar.set_ticks(cbar_ticks)
+        
         # Customize colorbar tick labels
         cbar.ax.tick_params(labelsize=font_size.get('cbar_ticks', font_size['ticks_label']))
         
@@ -1071,7 +1075,8 @@ def plot_annotated_heatmap(
     ax.set_xticklabels(
         xticklabels,
         rotation=xticklabels_rotation,
-        ha='right',
+        ha='center' if xticklabels_rotation == 90 else 'right',
+        va='top',
         fontsize=font_size['ticks_label']
     )
     ax.set_yticklabels(
@@ -1205,8 +1210,10 @@ def plot_annotated_heatmap(
             start_x = xlim[0] - total_row_patch_width + sum(row_patch_width[:annot_idx]) + row_patch_spacing * annot_idx
             
             col_name = row_annotation_col[annot_idx]
+            present_categories = set()
             for i, row_idx in enumerate(data.index):
                 category = row_annotations.loc[row_idx, col_name]
+                present_categories.add(category)
                 color = row_palette[annot_idx]. get(category, 'grey')
                 rect = Rectangle(
                     (start_x, i),
@@ -1218,12 +1225,13 @@ def plot_annotated_heatmap(
                     clip_on=False,
                     zorder=-1
                 )
-                ax. add_patch(rect)
+                ax.add_patch(rect)
             
             # Create legend for this row annotation
             legend_elements_row = [
                 Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
                 for category, color in row_palette[annot_idx].items()
+                if category in present_categories
             ]
             legend_dict[f'row_{annot_idx}'] = {
                 'handles': legend_elements_row,
@@ -1239,8 +1247,10 @@ def plot_annotated_heatmap(
             start_y = ylim[0] + sum(col_patch_height[:annot_idx]) + col_patch_spacing * annot_idx
             
             col_name = col_annotation_col[annot_idx]
+            present_categories = set()
             for j, col_idx in enumerate(data.columns):
                 category = col_annotations.loc[col_idx, col_name]
+                present_categories.add(category)
                 color = col_palette[annot_idx].get(category, 'grey')
                 rect = Rectangle(
                     (j, start_y),
@@ -1257,7 +1267,8 @@ def plot_annotated_heatmap(
             # Create legend for this column annotation
             legend_elements_col = [
                 Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
-                for category, color in col_palette[annot_idx]. items()
+                for category, color in col_palette[annot_idx].items()
+                if category in present_categories
             ]
             legend_dict[f'col_{annot_idx}'] = {
                 'handles': legend_elements_col,
