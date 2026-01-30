@@ -16,13 +16,15 @@ def plot_dim_reduction(
     title="Dimensionality Reduction",
     font_sizes=None,
     legend_title=None,
+    separate_legends=False,  # NEW: Whether to create separate legend figures
+    legend_orientation='vertical',  # NEW: 'vertical' or 'horizontal' for legends
     color_palette=None,  # NEW:  Optional dict mapping category values to colors
     show_loadings=False,
     loadings_df=None,
     loadings_scale=1,
     arrow_color='k',
-    arrow_width=0.01,
-    arrow_headwidth=0.02,
+    arrow_width=0.05,
+    arrow_headwidth=0.2,
     show_centroids=False,
     centroid_categories=None,
     centroid_size=200,
@@ -196,7 +198,11 @@ def plot_dim_reduction(
 
     # ---- Loadings ----
     if show_loadings and loadings_df is not None:
+        loading_texts = []
+        loadings_fontsize = font_sizes.get('loadings', 12) if font_sizes else 11
+        
         for idx, row in loadings_df.iterrows():
+            # Draw Arrow
             ax.arrow(
                 0, 0, 
                 row[x]*loadings_scale, 
@@ -206,16 +212,20 @@ def plot_dim_reduction(
                 head_width=arrow_headwidth, 
                 alpha=0.8
             )
-            ax.text(
-                row[x]*(loadings_scale+0.15), 
-                row[y]*(loadings_scale+0.15), 
+            
+            # Draw Text at initial position
+            # We assign it to a variable 'txt' and append to list
+            txt = ax.text(
+                (row[x]*loadings_scale)+0.8 if row[x]>=0 else (row[x]*loadings_scale)-0.8, 
+                (row[y]*loadings_scale)+0.8 if row[y]>=0 else (row[y]*loadings_scale)-0.8, 
                 str(idx), 
                 color=arrow_color, 
-                fontsize=font_sizes. get('loadings',12) if font_sizes else 11, 
+                fontsize=loadings_fontsize, 
                 ha='center', 
                 va='center'
             )
-
+            loading_texts.append(txt)
+            
     # ---- Point Labels ----
     if show_labels: 
         try:
@@ -268,47 +278,158 @@ def plot_dim_reduction(
                     alpha=0.8
                 )
 
-    # ---- Legend ----
-    legend_handles = []
-    legend_labels = []
-    # Color legend
-    if color_col is not None: 
-        legend_handles.append(Line2D([0], [0], color='none'))
-        legend_labels.append('Color Style')
+    # # ---- Legend ----
+    # legend_handles = []
+    # legend_labels = []
+    # # Color legend
+    # if color_col is not None: 
+    #     legend_handles.append(Line2D([0], [0], color='none'))
+    #     legend_labels.append('Color Style')
+    #     for val in unique_colors:
+    #         legend_handles.append(Patch(facecolor=color_map[val], edgecolor='k', label=str(val), alpha=0.5))
+    #         legend_labels.append(str(val))
+    # # Style legend
+    # if style_col is not None:  
+    #     legend_handles.append(Line2D([0], [0], color='none'))
+    #     legend_labels.append('Shape Style')
+    #     for style in unique_styles:
+    #         marker = style_map.get(style, 'o')
+    #         legend_handles.append(Line2D([0], [0], marker=marker, color='w', 
+    #                                      markerfacecolor='grey', 
+    #                                      markeredgecolor='k', markeredgewidth=1, 
+    #                                      markersize=10, linestyle='', label=str(style)))
+    #         legend_labels.append(str(style))
+    # # Ellipse legend - NO SORTING, maintain order from loop
+    # if ellipse_legend_elements:
+    #     legend_handles.append(Line2D([0], [0], color='none'))
+    #     legend_labels.append('Ellipsoid')
+    #     for lab, handle in ellipse_legend_elements:   # Removed sorted()
+    #         legend_handles.append(handle)
+    #         legend_labels. append(lab)
+
+    # fig.legend(
+    #     handles=legend_handles,
+    #     labels=legend_labels,
+    #     title=legend_title,
+    #     title_fontsize=font_sizes. get('legend_title',12) if font_sizes else 12,
+    #     fontsize=font_sizes.get('legend',10) if font_sizes else 10,
+    #     loc='center left', 
+    #     bbox_to_anchor=(1.1, 0.5)
+    # )
+    # plt.tight_layout()
+
+    
+    # if filepath and show:
+    #     plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
+    #     plt.show()
+    # elif filepath and not show:
+    #     plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
+    #     plt.close()
+    # elif not filepath and show:
+    #     plt.show()
+    # elif not filepath and not show:
+    #     return fig, ax
+    # ---- Legend Logic ----
+    legend_figs = {} # Dictionary to store separate legend figures
+    
+    # 1. Collect handles into groups first
+    # This keeps the logic clean regardless of whether we want separate or combined legends
+    legend_groups = {} 
+    
+    if color_col is not None:
+        handles = []
         for val in unique_colors:
-            legend_handles.append(Patch(facecolor=color_map[val], edgecolor='k', label=str(val), alpha=0.5))
-            legend_labels.append(str(val))
-    # Style legend
-    if style_col is not None:  
-        legend_handles.append(Line2D([0], [0], color='none'))
-        legend_labels.append('Shape Style')
+            handles.append(Patch(facecolor=color_map[val], edgecolor='k', label=str(val), alpha=0.5))
+        legend_groups['Color Style'] = handles
+
+    if style_col is not None:
+        handles = []
         for style in unique_styles:
             marker = style_map.get(style, 'o')
-            legend_handles.append(Line2D([0], [0], marker=marker, color='w', 
+            handles.append(Line2D([0], [0], marker=marker, color='w', 
                                          markerfacecolor='grey', 
                                          markeredgecolor='k', markeredgewidth=1, 
                                          markersize=10, linestyle='', label=str(style)))
-            legend_labels.append(str(style))
-    # Ellipse legend - NO SORTING, maintain order from loop
+        legend_groups['Shape Style'] = handles
+        
     if ellipse_legend_elements:
-        legend_handles.append(Line2D([0], [0], color='none'))
-        legend_labels.append('Ellipsoid')
-        for lab, handle in ellipse_legend_elements:   # Removed sorted()
-            legend_handles.append(handle)
-            legend_labels. append(lab)
+        handles = []
+        # No sorting, maintain order from loop as per original code
+        for lab, handle in ellipse_legend_elements:
+            handle.set_label(lab) # Ensure label is attached to handle
+            handles.append(handle)
+        legend_groups['Ellipsoid'] = handles
 
-    fig.legend(
-        handles=legend_handles,
-        labels=legend_labels,
-        title=legend_title,
-        title_fontsize=font_sizes. get('legend_title',12) if font_sizes else 12,
-        fontsize=font_sizes.get('legend',10) if font_sizes else 10,
-        loc='center left', 
-        bbox_to_anchor=(1.1, 0.5)
-    )
+    # 2. Generate Legends based on configuration
+    if separate_legends:
+        # --- OPTION A: Separate Figures ---
+        for title, handles in legend_groups.items():
+            n_items = len(handles)
+            
+            # Calculate dynamic figsize based on orientation
+            if legend_orientation == 'horizontal':
+                ncol = n_items
+                # Width grows with items, fixed height
+                figsize_leg = (n_items * 1.5 + 1, 1.2) 
+            else:
+                ncol = 1
+                # Fixed width, height grows with items
+                figsize_leg = (2.5, n_items * 0.4 + 0.8)
+            
+            l_fig = plt.figure(figsize=figsize_leg)
+            l_ax = l_fig.add_subplot(111)
+            l_ax.axis('off')
+            
+            l_ax.legend(
+                handles=handles,
+                title=title,
+                loc='center',
+                ncol=ncol,
+                frameon=False,
+                fontsize=font_sizes.get('legend', 10) if font_sizes else 10,
+                title_fontsize=font_sizes.get('legend_title', 12) if font_sizes else 12
+            )
+            
+            # Store in dict
+            clean_key = title.lower().replace(' ', '_')
+            legend_figs[clean_key] = l_fig
+            
+            # Save immediately if filepath provided
+            if filepath:
+                base, ext = filepath.rsplit('.', 1)
+                l_path = f"{base}_legend_{clean_key}.{ext}"
+                l_fig.savefig(l_path, dpi=600, bbox_inches='tight', transparent=False)
+
+    else:
+        # --- OPTION B: Combined Legend (Main Figure) ---
+        legend_handles = []
+        legend_labels = []
+        
+        for title, handles in legend_groups.items():
+            # Add Section Header (Invisible line hack)
+            legend_handles.append(Line2D([0], [0], color='none'))
+            legend_labels.append(title)
+            
+            # Add actual items
+            for h in handles:
+                legend_handles.append(h)
+                legend_labels.append(h.get_label())
+
+        # Only add legend if items exist
+        if legend_handles:
+            fig.legend(
+                handles=legend_handles,
+                labels=legend_labels,
+                title=legend_title,
+                title_fontsize=font_sizes.get('legend_title',12) if font_sizes else 12,
+                fontsize=font_sizes.get('legend',10) if font_sizes else 10,
+                loc='center left', 
+                bbox_to_anchor=(1.1, 0.5)
+            )
+
     plt.tight_layout()
-
     
+    # 3. Handle Output
     if filepath and show:
         plt.savefig(filepath, dpi=600, bbox_inches='tight', transparent=False)
         plt.show()
@@ -317,8 +438,10 @@ def plot_dim_reduction(
         plt.close()
     elif not filepath and show:
         plt.show()
-    elif not filepath and not show:
-        return fig, ax
+    
+    # Always return figures if not just showing
+    if not show:
+        return fig, ax, legend_figs
 
 # ---------------------------------------------------------------------------------------------------------------
 import numpy as np
@@ -598,6 +721,7 @@ from typing import Optional, Dict, Tuple, Union, Literal, List
 
 def plot_annotated_heatmap(
     data: pd. DataFrame,
+    transpose: bool = False,
     row_annotations:  Optional[pd.DataFrame] = None,
     col_annotations: Optional[pd.DataFrame] = None,
     row_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
@@ -636,6 +760,7 @@ def plot_annotated_heatmap(
     colorbar_label:  Optional[str] = None,
     cbar_ticks: Optional[Sequence[float]] = None,
     colorbar_orientation: Optional[Literal['vertical', 'horizontal']] = None,
+    colorbar_coords: Optional[Tuple[float, float, float, float]] = None,
     vmin: Optional[float] = None,
     vmax: Optional[float] = None,
     center:  Optional[float] = None,
@@ -643,6 +768,8 @@ def plot_annotated_heatmap(
     heatmap_type: Literal['qualitative', 'quantitative'] = 'qualitative',
     linewidths: float = 0.5,
     linecolor: str = 'grey',
+    row_patch_alpha: float = 1.0,
+    col_patch_alpha: float = 1.0,
     xticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
     yticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
     xticklabels_rotation: float = 45,
@@ -665,7 +792,9 @@ def plot_annotated_heatmap(
     row_separation_linestyle: Union[str, List[str]] = '-',
     col_separation_linestyle: Union[str, List[str]] = '-',
     row_separation_alpha: Union[float, List[float]] = 1.0,
-    col_separation_alpha: Union[float, List[float]] = 1.0
+    col_separation_alpha: Union[float, List[float]] = 1.0,
+    separate_legends: bool = False,
+    legend_orientation: Literal['vertical', 'horizontal'] = 'vertical',
 ) -> Tuple[plt.Figure, plt. Axes]:
     """
     Create an annotated heatmap with colored patches for row and column categories. 
@@ -866,7 +995,44 @@ def plot_annotated_heatmap(
     ...      col_separation_alpha=0.6   # More visible
     ... )
     """
-    
+
+    if transpose:
+        # Transpose main data
+        data = data.T
+
+        # Swap annotations
+        row_annotations, col_annotations = col_annotations, row_annotations
+        row_annotation_col, col_annotation_col = col_annotation_col, row_annotation_col
+        row_palette, col_palette = col_palette, row_palette
+
+        # Swap labels and titles
+        xlabel, ylabel = ylabel, xlabel
+        row_legend_title, col_legend_title = col_legend_title, row_legend_title
+
+        # Swap patch dimensions
+        row_patch_width, col_patch_height = col_patch_height, row_patch_width
+        row_patch_auto_width, col_patch_auto_height = col_patch_auto_height, row_patch_auto_width
+        row_patch_spacing, col_patch_spacing = col_patch_spacing, row_patch_spacing
+        row_patch_alpha, col_patch_alpha = col_patch_alpha, row_patch_alpha
+
+        # Swap tick labels and rotations
+        xticklabels, yticklabels = yticklabels, xticklabels
+        xticklabels_rotation, yticklabels_rotation = yticklabels_rotation, xticklabels_rotation
+        tick_pad_x, tick_pad_y = tick_pad_y, tick_pad_x
+
+        # Swap separation logic
+        row_separation_col, col_separation_col = col_separation_col, row_separation_col
+        row_separation_linewidth, col_separation_linewidth = (
+            col_separation_linewidth,
+            row_separation_linewidth,
+        )
+        row_separation_color, col_separation_color = col_separation_color, row_separation_color
+        row_separation_linestyle, col_separation_linestyle = (
+            col_separation_linestyle,
+            row_separation_linestyle,
+        )
+        row_separation_alpha, col_separation_alpha = col_separation_alpha, row_separation_alpha
+
     # Convert single values to lists for uniform handling
     if row_annotation_col is not None and not isinstance(row_annotation_col, list):
         row_annotation_col = [row_annotation_col]
@@ -1016,17 +1182,18 @@ def plot_annotated_heatmap(
     
     # Set colorbar position and orientation
     if show_colorbar:
-        cbar_kws. update({
+        cbar_kws.update({
             'orientation': colorbar_orientation,
             'pad':  colorbar_pad,
-            'label':  colorbar_label if colorbar_label else ''
+            'label':  colorbar_label if colorbar_label else '',
+            'location': colorbar_position
         })
         
         # Add fraction (size) parameter
         if 'fraction' not in cbar_kws:
             # Convert percentage string to float
             if isinstance(colorbar_size, str) and '%' in colorbar_size:  
-                size_value = float(colorbar_size. rstrip('%')) / 100
+                size_value = float(colorbar_size.rstrip('%')) / 100
             else:  
                 size_value = 0.03
             cbar_kws['fraction'] = size_value
@@ -1052,12 +1219,16 @@ def plot_annotated_heatmap(
     # Customize colorbar if shown
     if show_colorbar and hasattr(im, 'collections') and len(im.collections) > 0:
         # Get the colorbar
-        cbar = ax.collections[0]. colorbar
+        cbar = ax.collections[0].colorbar
+
+        # Customize colorbar position
+        if colorbar_coords is not None:
+            cbar.ax.set_position(colorbar_coords)
         
         # Customize colorbar label
         if colorbar_label: 
             cbar.set_label(colorbar_label,
-                          fontsize=font_size. get('cbar_label', font_size['label']),
+                          fontsize=font_size.get('cbar_label', font_size['label']),
                           rotation=90 if colorbar_orientation == 'vertical' else 0,
                           labelpad=10)
         
@@ -1216,9 +1387,10 @@ def plot_annotated_heatmap(
                 present_categories.add(category)
                 color = row_palette[annot_idx]. get(category, 'grey')
                 rect = Rectangle(
-                    (start_x, i),
+                    (start_x - 0.2, i),
                     row_patch_width[annot_idx],
                     1,
+                    alpha=row_patch_alpha if row_patch_alpha is not None else 1.0,
                     linewidth=linewidths,
                     edgecolor=linecolor,
                     facecolor=color,
@@ -1253,9 +1425,10 @@ def plot_annotated_heatmap(
                 present_categories.add(category)
                 color = col_palette[annot_idx].get(category, 'grey')
                 rect = Rectangle(
-                    (j, start_y),
+                    (j, start_y + 0.2),
                     1,
                     col_patch_height[annot_idx],
+                    alpha=col_patch_alpha if col_patch_alpha is not None else 1.0,
                     linewidth=linewidths,
                     edgecolor=linecolor,
                     facecolor=color,
@@ -1320,36 +1493,140 @@ def plot_annotated_heatmap(
                         zorder=10 + sep_idx  # Higher zorder for first level
                     )
     
-    # Add value legend if specified (only for qualitative heatmaps)
-    if value_legend_labels is not None and heatmap_type == 'qualitative':
-        # Get colormap colors
-        if isinstance(cmap, str):
-            colormap = plt.get_cmap(cmap)
-        else:
-            colormap = cmap
+    # # Add value legend if specified (only for qualitative heatmaps)
+    # if value_legend_labels is not None and heatmap_type == 'qualitative':
+    #     # Get colormap colors
+    #     if isinstance(cmap, str):
+    #         colormap = plt.get_cmap(cmap)
+    #     else:
+    #         colormap = cmap
         
-        # Create legend elements based on value_legend_labels
-        if 'custom' in value_legend_labels:  
-            # Custom legend elements provided
-            legend_elements_value = value_legend_labels['custom']
-        else:
-            # Create default binary legend (e.g., Present/Absent)
-            legend_elements_value = [
-                Rectangle((0, 0), 1, 1, fc=colormap(1.0), ec=linecolor,
-                         linewidth=linewidths, label=value_legend_labels. get('high', 'High')),
-                Rectangle((0, 0), 1, 1, fc=colormap(0.0), ec=linecolor,
-                         linewidth=linewidths, label=value_legend_labels. get('low', 'Low'))
-            ]
+    #     # Create legend elements based on value_legend_labels
+    #     if 'custom' in value_legend_labels:  
+    #         # Custom legend elements provided
+    #         legend_elements_value = value_legend_labels['custom']
+    #     else:
+    #         # Create default binary legend (e.g., Present/Absent)
+    #         legend_elements_value = [
+    #             Rectangle((0, 0), 1, 1, fc=colormap(1.0), ec=linecolor,
+    #                      linewidth=linewidths, label=value_legend_labels. get('high', 'High')),
+    #             Rectangle((0, 0), 1, 1, fc=colormap(0.0), ec=linecolor,
+    #                      linewidth=linewidths, label=value_legend_labels. get('low', 'Low'))
+    #         ]
         
-        legend_dict['value'] = {
-            'handles': legend_elements_value,
-            'title': value_legend_title,
-            'n_items': len(legend_elements_value)
-        }
+    #     legend_dict['value'] = {
+    #         'handles': legend_elements_value,
+    #         'title': value_legend_title,
+    #         'n_items': len(legend_elements_value)
+    #     }
     
-    # Determine legend order
+    # # Determine legend order
+    # if legend_order is None:
+    #     # Default order:  all row legends, then all col legends, then value
+    #     legend_order = []
+    #     if row_annotation_col is not None:
+    #         legend_order.extend([f'row_{i}' for i in range(len(row_annotation_col))])
+    #     if col_annotation_col is not None:
+    #         legend_order.extend([f'col_{i}' for i in range(len(col_annotation_col))])
+    #     legend_order.append('value')
+    
+    # # Filter legend_order to only include legends that exist
+    # legends_to_plot = [key for key in legend_order if key in legend_dict]
+    
+    # # Calculate automatic spacing if enabled
+    # if legend_auto_spacing and legends_to_plot:
+    #     # Estimate legend heights based on number of items
+    #     # Each item is approximately 0.03 in figure coordinates, title adds 0.04
+    #     legend_heights = []
+    #     for key in legends_to_plot:  
+    #         n_items = legend_dict[key]['n_items']
+    #         estimated_height = 0.04 + (n_items * 0.03)  # title + items
+    #         legend_heights.append(estimated_height)
+        
+    #     total_legend_height = sum(legend_heights) + (len(legends_to_plot) - 1) * legend_spacing
+        
+    #     # Calculate starting position based on alignment
+    #     if legend_alignment == 'top':
+    #         start_y = 0.95
+    #     elif legend_alignment == 'center':
+    #         start_y = 0.5 + (total_legend_height / 2)
+    #     elif legend_alignment == 'bottom':
+    #         start_y = 0.05 + total_legend_height
+    #     else: 
+    #         start_y = 0.95  # default to top
+        
+    #     # Calculate positions for each legend
+    #     legend_positions = []
+    #     current_y = start_y
+    #     for height in legend_heights:
+    #         legend_positions.append(current_y - height / 2)
+    #         current_y -= (height + legend_spacing)
+    # else:
+    #     # Use manual spacing
+    #     if legend_alignment == 'top':
+    #         start_y = 0.95
+    #     elif legend_alignment == 'center':
+    #         start_y = 0.5
+    #     elif legend_alignment == 'bottom':
+    #         start_y = 0.05 + (len(legends_to_plot) - 1) * legend_spacing
+    #     else:
+    #         start_y = 0.95
+        
+    #     legend_positions = [start_y - i * legend_spacing for i in range(len(legends_to_plot))]
+    
+    # # Adjust legend position if colorbar is shown on the same side
+    # if show_colorbar and colorbar_position == legend_position:
+    #     if legend_position == 'right':
+    #         legend_bbox_x = legend_bbox_x + 0.15  # Move legends further right
+    #     elif legend_position == 'left':
+    #         legend_bbox_x = legend_bbox_x - 0.15  # Move legends further left
+    
+    # # Set bbox_to_anchor based on position
+    # if legend_position == 'right':  
+    #     legend_loc = 'center left'
+    #     bbox_x = legend_bbox_x
+    # elif legend_position == 'left':
+    #     legend_loc = 'center right'
+    #     bbox_x = -0.02
+    # elif legend_position == 'top':
+    #     legend_loc = 'lower center'
+    #     bbox_x = 0.5
+    # elif legend_position == 'bottom':
+    #     legend_loc = 'upper center'
+    #     bbox_x = 0.5
+    # else:
+    #     legend_loc = 'center left'
+    #     bbox_x = legend_bbox_x
+    
+    # # Add all legends to the figure
+    # for idx, key in enumerate(legends_to_plot):
+    #     legend_info = legend_dict[key]
+    #     y_position = legend_positions[idx]
+        
+    #     fig.legend(
+    #         handles=legend_info['handles'],
+    #         title=legend_info['title'],
+    #         loc=legend_loc,
+    #         bbox_to_anchor=(bbox_x, y_position),
+    #         frameon=True,
+    #         fontsize=font_size['legend'],
+    #         title_fontsize=font_size['legend_title'],
+    #     )
+    
+    # # Set title
+    # ax.set_title(title, fontsize=font_size['title'], pad=50)
+    
+    # # Adjust layout
+    # plt.tight_layout()
+    
+    # # Save the figure if path provided
+    # if save_path is not None:
+    #     plt.savefig(save_path, dpi=dpi, bbox_inches='tight', transparent=False)
+    
+    # return fig, ax
+
+    # 1. Determine legend order
     if legend_order is None:
-        # Default order:  all row legends, then all col legends, then value
         legend_order = []
         if row_annotation_col is not None:
             legend_order.extend([f'row_{i}' for i in range(len(row_annotation_col))])
@@ -1357,100 +1634,145 @@ def plot_annotated_heatmap(
             legend_order.extend([f'col_{i}' for i in range(len(col_annotation_col))])
         legend_order.append('value')
     
-    # Filter legend_order to only include legends that exist
     legends_to_plot = [key for key in legend_order if key in legend_dict]
-    
-    # Calculate automatic spacing if enabled
-    if legend_auto_spacing and legends_to_plot:
-        # Estimate legend heights based on number of items
-        # Each item is approximately 0.03 in figure coordinates, title adds 0.04
-        legend_heights = []
-        for key in legends_to_plot:  
-            n_items = legend_dict[key]['n_items']
-            estimated_height = 0.04 + (n_items * 0.03)  # title + items
-            legend_heights.append(estimated_height)
-        
-        total_legend_height = sum(legend_heights) + (len(legends_to_plot) - 1) * legend_spacing
-        
-        # Calculate starting position based on alignment
-        if legend_alignment == 'top':
-            start_y = 0.95
-        elif legend_alignment == 'center':
-            start_y = 0.5 + (total_legend_height / 2)
-        elif legend_alignment == 'bottom':
-            start_y = 0.05 + total_legend_height
-        else: 
-            start_y = 0.95  # default to top
-        
-        # Calculate positions for each legend
-        legend_positions = []
-        current_y = start_y
-        for height in legend_heights:
-            legend_positions.append(current_y - height / 2)
-            current_y -= (height + legend_spacing)
+    legend_figs = {} # Dictionary to store separate legend figures if requested
+
+    # 2. Configure Legend Columns based on orientation
+    # If horizontal, we try to put all items in one row (ncol=n_items)
+    def get_ncol(n_items, orientation):
+        if orientation == 'horizontal':
+            return n_items
+        return 1
+
+    # ---------------------------------------------------------
+    # CASE A: Separate Legends (New Feature)
+    # ---------------------------------------------------------
+    if separate_legends:
+        for key in legends_to_plot:
+            legend_info = legend_dict[key]
+            
+            # Create a new small figure for this legend
+            # Size calculation is rough; might need tuning based on font size
+            n_items = legend_info['n_items']
+            if legend_orientation == 'horizontal':
+                figsize = (n_items * 1.5, 1) 
+            else:
+                figsize = (2, n_items * 0.5 + 0.5)
+                
+            l_fig = plt.figure(figsize=figsize)
+            l_ax = l_fig.add_subplot(111)
+            l_ax.axis('off') # Hide axis
+            
+            l_ax.legend(
+                handles=legend_info['handles'],
+                title=legend_info['title'],
+                loc='center',
+                ncol=get_ncol(n_items, legend_orientation),
+                frameon=False, # Usually cleaner for separate figures
+                fontsize=font_size.get('legend', 10),
+                title_fontsize=font_size.get('legend_title', 12)
+            )
+            legend_figs[key] = l_fig
+            
+            # Save individual legend if path provided
+            if save_path is not None:
+                # Insert _legend_{key} before file extension
+                base, ext = save_path.rsplit('.', 1)
+                l_save_path = f"{base}_legend_{key}.{ext}"
+                l_fig.savefig(l_save_path, dpi=dpi, bbox_inches='tight')
+
+    # ---------------------------------------------------------
+    # CASE B: Legends on Main Figure (Existing Logic + Horizontal Support)
+    # ---------------------------------------------------------
     else:
-        # Use manual spacing
-        if legend_alignment == 'top':
-            start_y = 0.95
-        elif legend_alignment == 'center':
-            start_y = 0.5
-        elif legend_alignment == 'bottom':
-            start_y = 0.05 + (len(legends_to_plot) - 1) * legend_spacing
+        # Calculate automatic spacing if enabled
+        if legend_auto_spacing and legends_to_plot:
+            legend_heights = []
+            for key in legends_to_plot:  
+                n_items = legend_dict[key]['n_items']
+                
+                # Adjust height estimation based on orientation
+                if legend_orientation == 'horizontal':
+                    # Horizontal legends are short (essentially 1 row + title)
+                    estimated_height = 0.06 
+                else:
+                    # Vertical legends depend on number of items
+                    estimated_height = 0.04 + (n_items * 0.03)
+                
+                legend_heights.append(estimated_height)
+            
+            total_legend_height = sum(legend_heights) + (len(legends_to_plot) - 1) * legend_spacing
+            
+            # Calculate starting position logic (same as before)
+            if legend_alignment == 'top':
+                start_y = 0.95
+            elif legend_alignment == 'center':
+                start_y = 0.5 + (total_legend_height / 2)
+            elif legend_alignment == 'bottom':
+                start_y = 0.05 + total_legend_height
+            else: 
+                start_y = 0.95 
+
+            legend_positions = []
+            current_y = start_y
+            for height in legend_heights:
+                legend_positions.append(current_y - height / 2)
+                current_y -= (height + legend_spacing)
         else:
-            start_y = 0.95
-        
-        legend_positions = [start_y - i * legend_spacing for i in range(len(legends_to_plot))]
-    
-    # Adjust legend position if colorbar is shown on the same side
-    if show_colorbar and colorbar_position == legend_position:
-        if legend_position == 'right':
-            legend_bbox_x = legend_bbox_x + 0.15  # Move legends further right
+            # Manual spacing fallback
+            if legend_alignment == 'top': start_y = 0.95
+            elif legend_alignment == 'center': start_y = 0.5
+            elif legend_alignment == 'bottom': start_y = 0.05 + (len(legends_to_plot) - 1) * legend_spacing
+            else: start_y = 0.95
+            legend_positions = [start_y - i * legend_spacing for i in range(len(legends_to_plot))]
+
+        # Positioning logic (bbox_x calculation same as before)
+        if show_colorbar and colorbar_position == legend_position:
+            if legend_position == 'right': legend_bbox_x = legend_bbox_x + 0.15
+            elif legend_position == 'left': legend_bbox_x = legend_bbox_x - 0.15
+
+        if legend_position == 'right':  
+            legend_loc = 'center left'
+            bbox_x = legend_bbox_x
         elif legend_position == 'left':
-            legend_bbox_x = legend_bbox_x - 0.15  # Move legends further left
-    
-    # Set bbox_to_anchor based on position
-    if legend_position == 'right':  
-        legend_loc = 'center left'
-        bbox_x = legend_bbox_x
-    elif legend_position == 'left':
-        legend_loc = 'center right'
-        bbox_x = -0.02
-    elif legend_position == 'top':
-        legend_loc = 'lower center'
-        bbox_x = 0.5
-    elif legend_position == 'bottom':
-        legend_loc = 'upper center'
-        bbox_x = 0.5
-    else:
-        legend_loc = 'center left'
-        bbox_x = legend_bbox_x
-    
-    # Add all legends to the figure
-    for idx, key in enumerate(legends_to_plot):
-        legend_info = legend_dict[key]
-        y_position = legend_positions[idx]
-        
-        fig.legend(
-            handles=legend_info['handles'],
-            title=legend_info['title'],
-            loc=legend_loc,
-            bbox_to_anchor=(bbox_x, y_position),
-            frameon=True,
-            fontsize=font_size['legend'],
-            title_fontsize=font_size['legend_title'],
-        )
-    
+            legend_loc = 'center right'
+            bbox_x = -0.02
+        elif legend_position == 'top':
+            legend_loc = 'lower center'
+            bbox_x = 0.5
+        elif legend_position == 'bottom':
+            legend_loc = 'upper center'
+            bbox_x = 0.5
+        else:
+            legend_loc = 'center left'
+            bbox_x = legend_bbox_x
+
+        # Add legends to figure
+        for idx, key in enumerate(legends_to_plot):
+            legend_info = legend_dict[key]
+            y_position = legend_positions[idx]
+            
+            fig.legend(
+                handles=legend_info['handles'],
+                title=legend_info['title'],
+                loc=legend_loc,
+                bbox_to_anchor=(bbox_x, y_position),
+                ncol=get_ncol(legend_info['n_items'], legend_orientation), # Apply orientation
+                frameon=True,
+                fontsize=font_size.get('legend', 10),
+                title_fontsize=font_size.get('legend_title', 12),
+            )
+
     # Set title
-    ax.set_title(title, fontsize=font_size['title'], pad=20)
-    
-    # Adjust layout
+    ax.set_title(title, fontsize=font_size.get('title', 14), pad=50)
     plt.tight_layout()
-    
-    # Save the figure if path provided
+
+    # Save main figure
     if save_path is not None:
         plt.savefig(save_path, dpi=dpi, bbox_inches='tight', transparent=False)
-    
-    return fig, ax
+
+    return fig, ax, legend_figs # Return dict of legend figures (or empty dict)
+
 
 # -----------------------------------------------------------------------
 
