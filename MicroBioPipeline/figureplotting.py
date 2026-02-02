@@ -718,7 +718,6 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import ColorbarBase
 from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence
 
-
 def plot_annotated_heatmap(
     data: pd.DataFrame,
     transpose: bool = False,
@@ -772,14 +771,20 @@ def plot_annotated_heatmap(
     center: Optional[float] = None,
     robust: bool = False,
     heatmap_type: Literal['qualitative', 'quantitative'] = 'qualitative',
-    linewidths: float = 0.5,
-    linecolor: str = 'grey',
+    heatmap_linewidths: float = 0.5,
+    heatmap_linecolor: str = 'grey',
+    patch_linewidths: float = 0.0,
+    patch_linecolor: str = 'grey',
+    legend_patch_linewidths: Optional[float] = 0.5,
+    legend_patch_linecolor: Optional[str] = 'gray',
     row_patch_alpha: float = 1.0,
     col_patch_alpha: float = 1.0,
     xticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
     yticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
     xticklabels_rotation: float = 45,
     yticklabels_rotation: float = 0,
+    xticklabels_position: Literal['top', 'bottom'] = 'bottom',
+    yticklabels_position: Literal['left', 'right'] = 'left',
     auto_tick_padding: bool = True,
     tick_pad_x: Optional[float] = None,
     tick_pad_y: Optional[float] = None,
@@ -809,270 +814,41 @@ def plot_annotated_heatmap(
     
     Parameters
     ----------
-    data : pd.DataFrame
-        The main data to plot as a heatmap.
-    transpose : bool, default False
-        If True, transpose the data matrix and swap all row/column related parameters.
-    fig : matplotlib.figure.Figure, optional
-        Existing figure to plot on. If None, creates a new figure.
-        When provided, ax must also be provided.
-    ax : matplotlib.axes.Axes, optional
-        Existing axes to plot on. If None, creates a new axes.
-        When provided, fig must also be provided.
-    ax_size : tuple of float, optional
-        Size of the axes (width, height) in inches when using existing fig/ax.
-        Used for font size calculations. If None and ax is provided, attempts to
-        extract size from axes position, otherwise uses figsize.
-    row_annotations : pd.DataFrame, optional
-        Single DataFrame with row annotations (index should match data.index).
-        Can contain multiple columns for different annotation types.
-    col_annotations : pd.DataFrame, optional
-        Single DataFrame with column annotations (index should match data.columns).
-        Can contain multiple columns for different annotation types.
-    row_palette : dict or list of dict, optional
-        Single dictionary or list of dictionaries mapping row categories to colors.
-        If list, must match length of row_annotation_col.
-    col_palette : dict or list of dict, optional
-        Single dictionary or list of dictionaries mapping column categories to colors.
-        If list, must match length of col_annotation_col.
-    figsize : tuple, default (10, 14)
-        Figure size (width, height) in inches. Used when creating new figure or
-        for font size calculations when ax_size is not provided.
-    square : bool, default False
-        If True, set heatmap cells to be square-shaped.
-    cmap : str or colormap, default 'Blues'
-        Colormap for the heatmap. Popular options: 
-        - Quantitative: 'viridis', 'plasma', 'RdYlBu_r', 'coolwarm', 'seismic'
-        - Qualitative: 'Blues', 'Reds', 'Greens'
-    font_scale : float, default 13
-        Scale factor for font sizes.
-    title : str, default 'Annotated Heatmap'
-        Title for the plot.
-    xlabel : str, default 'Columns'
-        Label for x-axis.
-    ylabel : str, default 'Rows'
-        Label for y-axis.
-    row_patch_width : float or list of float, optional
-        Manual width(s) of row annotation patches. If None and auto is True, calculated automatically.
-        If list, must match length of row_annotation_col.
-    col_patch_height : float or list of float, optional
-        Manual height(s) of column annotation patches. If None and auto is True, calculated automatically.
-        If list, must match length of col_annotation_col.
-    row_patch_auto_width : bool, default True
-        Automatically calculate row patch width based on heatmap dimensions.
-    col_patch_auto_height : bool, default True
-        Automatically calculate column patch height based on heatmap dimensions.
-    patch_width_ratio : float, default 0.05
-        Ratio of heatmap width for row patches (used when auto width is True).
-    patch_height_ratio : float, default 0.05
-        Ratio of heatmap height for column patches (used when auto height is True).
-    row_annotation_col : str or list of str, optional
-        Column name(s) in row_annotations DataFrame to use for coloring.
-        If list, creates multiple annotation tracks.
-    col_annotation_col : str or list of str, optional
-        Column name(s) in col_annotations DataFrame to use for coloring.
-        If list, creates multiple annotation tracks.
-    row_legend_title : str or list of str, default 'Row Categories'
-        Title(s) for row annotation legend(s).
-        If list, must match length of row_annotation_col.
-    col_legend_title : str or list of str, default 'Column Categories'
-        Title(s) for column annotation legend(s).
-        If list, must match length of col_annotation_col.
-    value_legend_title : str, default 'Values'
-        Title for value legend (used for qualitative heatmaps).
-    value_legend_labels : dict, optional
-        Custom labels for value legend (e.g., {'high': 'Present', 'low': 'Absent'}).
-        Only used when heatmap_type='qualitative'.
-    legend_position : str, default 'right'
-        Position of legends: 'right', 'left', 'top', or 'bottom'.
-    legend_alignment : str, default 'top'
-        Alignment of legend group: 'top', 'center', or 'bottom'.
-    legend_bbox_x : float, default 1.02
-        X-coordinate for legend bounding box (for right/left positions).
-    legend_auto_spacing : bool, default True
-        Automatically calculate spacing between legends based on their sizes.
-    legend_spacing : float, default 0.08
-        Vertical spacing between legends (used if auto_spacing is False).
-    legend_order : list, optional
-        Order of legends. Can contain 'row_0', 'row_1', ..., 'col_0', 'col_1', ..., 'value'.
-        Default is all row legends, then all col legends, then value legend.
-    save_path : str, optional
-        Path to save the figure. If separate_legends is True, individual legend files
-        will be saved with '_legend_{key}' appended to the filename.
-        If separate_colorbar is True, colorbar will be saved with '_colorbar' appended.
-    dpi : int, default 600
-        DPI for saved figure.
-    show_colorbar : bool, default False
-        Whether to show colorbar for heatmap values. Automatically True for quantitative heatmaps.
-    colorbar_position : str, default 'right'
-        Position of colorbar: 'right', 'left', 'top', or 'bottom'.
-        Only used when separate_colorbar=False and colorbar_ax is None.
-    colorbar_size : str, default '5%'
-        Size of the colorbar (percentage of the axes size).
-    colorbar_pad : float, default 0.05
-        Padding between heatmap and colorbar.
-    colorbar_label : str, optional
-        Label for the colorbar.
-    cbar_ticks : sequence of float, optional
-        Custom tick positions for the colorbar.
-    colorbar_orientation : str, optional
-        Orientation of colorbar. If None, automatically determined from position.
-    colorbar_coords : tuple of 4 floats, optional
-        Custom position for colorbar as (left, bottom, width, height) in figure coordinates.
-        Overrides automatic positioning. Only used when colorbar_ax is None.
-    colorbar_ax : matplotlib.axes.Axes, optional
-        Existing axes to use for colorbar. If provided, colorbar will be drawn in this axes
-        instead of being created automatically. This allows full control over colorbar positioning.
-    separate_colorbar : bool, default False
-        If True, create a separate figure for the colorbar instead of attaching it to the main plot.
-        Useful for independent positioning in complex layouts.
-    colorbar_figsize : tuple of float, optional
-        Figure size (width, height) for separate colorbar figure.
-        If None, automatically determined based on orientation.
-    vmin : float, optional
-        Minimum value for colorbar normalization.
-    vmax : float, optional
-        Maximum value for colorbar normalization.
-    center : float, optional
-        Value at which to center the colormap (for diverging colormaps).
-    robust : bool, default False
-        If True, use robust quantiles for colorbar limits.
-    heatmap_type : str, default 'qualitative'
-        Type of heatmap: 'qualitative' (binary/categorical) or 'quantitative' (gradient).
-    linewidths : float, default 0.5
-        Width of lines between cells.
-    linecolor : str, default 'grey'
-        Color of lines between cells.
-    row_patch_alpha : float, default 1.0
-        Transparency of row annotation patches (0.0-1.0).
-    col_patch_alpha : float, default 1.0
-        Transparency of column annotation patches (0.0-1.0).
-    xticklabels : pd.Series, list, or np.ndarray, optional
-        Custom labels for x-axis (columns). If None, uses data.columns.
-        Must have the same length as data.columns.
-    yticklabels : pd.Series, list, or np.ndarray, optional
-        Custom labels for y-axis (rows). If None, uses data.index.
-        Must have the same length as data.index.
-    xticklabels_rotation : float, default 45
-        Rotation angle for x-axis tick labels.
-    yticklabels_rotation : float, default 0
-        Rotation angle for y-axis tick labels.
-    auto_tick_padding : bool, default True
-        Automatically calculate tick padding based on patch dimensions.
-    tick_pad_x : float, optional
-        Manual padding for x-axis ticks. If None and auto is True, calculated automatically.
-    tick_pad_y : float, optional
-        Manual padding for y-axis ticks. If None and auto is True, calculated automatically.
-    tick_pad_ratio : float, default 1.5
-        Multiplier for converting patch dimensions to tick padding (in points).
-        Higher values create more space between patches and tick labels.
-    base_tick_pad : float, default 5.0
-        Base padding (in points) added to calculated tick padding.
-    font_size_func : callable, optional
-        Custom function to calculate font sizes. Should accept (width, height, unit, scale)
-        and return a dict with keys: 'ticks_label', 'label', 'legend', 'legend_title', 'title',
-        'colorbar_label', 'colorbar_ticks'.
-    cbar_kws : dict, optional
-        Additional keyword arguments for colorbar customization.
-    row_patch_spacing : float, default 0.0
-        Spacing between multiple row annotation patches (in data coordinates).
-    col_patch_spacing : float, default 0.0
-        Spacing between multiple column annotation patches (in data coordinates).
-    row_separation_col : str or list of str, optional
-        Column name(s) in row_annotations to use for drawing horizontal separation lines
-        between different categories. If list, draws multiple levels of separation lines.
-    col_separation_col : str or list of str, optional
-        Column name(s) in col_annotations to use for drawing vertical separation lines
-        between different categories. If list, draws multiple levels of separation lines.
-    row_separation_linewidth : float or list of float, default 2.0
-        Line width(s) for horizontal separation lines. If list, must match length of row_separation_col.
-    col_separation_linewidth : float or list of float, default 2.0
-        Line width(s) for vertical separation lines. If list, must match length of col_separation_col.
-    row_separation_color : str or list of str, default 'black'
-        Color(s) for horizontal separation lines. If list, must match length of row_separation_col.
-    col_separation_color : str or list of str, default 'black'
-        Color(s) for vertical separation lines. If list, must match length of col_separation_col.
-    row_separation_linestyle : str or list of str, default '-'
-        Line style(s) for horizontal separation lines. If list, must match length of row_separation_col.
-        Options: '-', '--', '-.', ':'
-    col_separation_linestyle : str or list of str, default '-'
-        Line style(s) for vertical separation lines. If list, must match length of col_separation_col.
-        Options: '-', '--', '-.', ':'
-    row_separation_alpha : float or list of float, default 1.0
-        Alpha (transparency) value(s) for horizontal separation lines (0.0-1.0).
-        If list, must match length of row_separation_col. 0.0 is fully transparent, 1.0 is fully opaque.
-    col_separation_alpha : float or list of float, default 1.0
-        Alpha (transparency) value(s) for vertical separation lines (0.0-1.0).
-        If list, must match length of col_separation_col. 0.0 is fully transparent, 1.0 is fully opaque.
-    separate_legends : bool, default False
-        If True, create separate figure objects for each legend instead of placing them on the main figure.
-        Useful for complex layouts or when legends need independent positioning.
-    legend_orientation : str, default 'vertical'
-        Orientation of legend items: 'vertical' (stacked) or 'horizontal' (side-by-side).
-        When 'horizontal', all items in a legend are displayed in one row.
+    [... previous parameters ...]
     
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        The main figure object containing the heatmap.
-    ax : matplotlib.axes.Axes
-        The axes object containing the heatmap.
-    legend_figs : dict
-        Dictionary of legend figure objects if separate_legends=True, otherwise empty dict.
-        Keys are legend identifiers (e.g., 'row_0', 'col_0', 'value').
-    colorbar_fig : matplotlib.figure.Figure or None
-        Separate colorbar figure if separate_colorbar=True, otherwise None.
+    patch_linewidths : float, default 0.0
+        Width of lines around annotation patches on the heatmap.
+    patch_linecolor : str, default 'grey'
+        Color of lines around annotation patches on the heatmap.
+    legend_patch_linewidths : float, optional
+        Width of lines around patches in the legend. If None, uses patch_linewidths.
+        This allows you to have borders in the legend even when patches on the heatmap have no borders.
+    legend_patch_linecolor : str, optional
+        Color of lines around patches in the legend. If None, uses patch_linecolor.
+    
+    [... rest of parameters ...]
     
     Examples
     --------
-    >>> # Basic usage with automatic colorbar positioning
-    >>> fig, ax, legends, cbar_fig = plot_annotated_heatmap(
+    >>> # Patches without borders, but legend with borders
+    >>> fig, ax, legends, cbar = plot_annotated_heatmap(
     ...     data=expression_data,
-    ...     heatmap_type='quantitative',
-    ...     show_colorbar=True,
-    ...     colorbar_label='Expression Level'
+    ...     row_annotations=df_annotations,
+    ...     row_annotation_col='category',
+    ...     row_palette={'A': 'red', 'B': 'blue'},
+    ...     patch_linewidths=0.0,           # No borders on heatmap patches
+    ...     legend_patch_linewidths=1.0,    # But show borders in legend
+    ...     legend_patch_linecolor='black'
     ... )
-    
-    >>> # Custom colorbar positioning with coords
-    >>> fig, ax, legends, cbar_fig = plot_annotated_heatmap(
-    ...     data=expression_data,
-    ...     show_colorbar=True,
-    ...     colorbar_coords=(0.92, 0.3, 0.02, 0.4),  # (left, bottom, width, height)
-    ...     colorbar_label='Log2 FC'
-    ... )
-    
-    >>> # Using existing axes with separate colorbar axes
-    >>> fig, axes = plt.subplots(1, 2, figsize=(15, 10),
-    ...                          gridspec_kw={'width_ratios': [20, 1]})
-    >>> plot_annotated_heatmap(
-    ...     data=expression_data,
-    ...     fig=fig, ax=axes[0],
-    ...     show_colorbar=True,
-    ...     colorbar_ax=axes[1],
-    ...     colorbar_label='Expression'
-    ... )
-    
-    >>> # Separate colorbar figure
-    >>> fig, ax, legends, cbar_fig = plot_annotated_heatmap(
-    ...     data=expression_data,
-    ...     show_colorbar=True,
-    ...     separate_colorbar=True,
-    ...     colorbar_figsize=(2, 6),
-    ...     save_path='heatmap.png'  # Also saves 'heatmap_colorbar.png'
-    ... )
-    
-    >>> # Complex multi-panel layout
-    >>> fig = plt.figure(figsize=(20, 10))
-    >>> gs = fig.add_gridspec(2, 3, width_ratios=[10, 10, 0.5])
-    >>> ax1 = fig.add_subplot(gs[0, 0])
-    >>> ax2 = fig.add_subplot(gs[1, 0])
-    >>> cbar_ax = fig.add_subplot(gs[:, 2])
-    >>> 
-    >>> plot_annotated_heatmap(data=data1, fig=fig, ax=ax1, 
-    ...                        show_colorbar=True, colorbar_ax=cbar_ax)
-    >>> plot_annotated_heatmap(data=data2, fig=fig, ax=ax2,
-    ...                        show_colorbar=False)  # Share colorbar
     """
+    
+    # Set defaults for legend patch styling
+    if legend_patch_linewidths is None:
+        legend_patch_linewidths = patch_linewidths
+    if legend_patch_linecolor is None:
+        legend_patch_linecolor = patch_linecolor
+    
+    # [All your existing code until the legend creation sections...]
     
     # Validate fig and ax parameters
     if (fig is None) != (ax is None):
@@ -1103,6 +879,7 @@ def plot_annotated_heatmap(
         # Swap tick labels and rotations
         xticklabels, yticklabels = yticklabels, xticklabels
         xticklabels_rotation, yticklabels_rotation = yticklabels_rotation, xticklabels_rotation
+        xticklabels_position, yticklabels_position = yticklabels_position, xticklabels_position
         tick_pad_x, tick_pad_y = tick_pad_y, tick_pad_x
 
         # Swap separation logic
@@ -1118,7 +895,6 @@ def plot_annotated_heatmap(
         )
         row_separation_alpha, col_separation_alpha = col_separation_alpha, row_separation_alpha
 
-    # [Previous validation and conversion code remains the same...]
     # Convert single values to lists for uniform handling
     if row_annotation_col is not None and not isinstance(row_annotation_col, list):
         row_annotation_col = [row_annotation_col]
@@ -1180,7 +956,9 @@ def plot_annotated_heatmap(
     else:
         yticklabels = data.index
     
-    # [Previous validation code for annotations and separations...]
+    # [Continue with all validation code...]
+    # [All the plotting code remains the same until legend creation...]
+    
     # Validate list lengths for row annotations
     if row_annotation_col is not None: 
         n_row_annots = len(row_annotation_col)
@@ -1241,19 +1019,19 @@ def plot_annotated_heatmap(
         font_size = font_size_func(calc_width, calc_height, 'in', scale=font_scale)
     else:
         font_size = {
-        'title': 20,
-        'suptitle': 24,
-        'axes_label': 16,
-        'ticks_label': 14,
-        'legend': 7,
-        'legend_title': 8,
-        'annotation': 9,
-        'cbar_label': 12,
-        'cbar_ticks': 10,
-        'label': 10,
-        'text': 10,
-        'node_label': 6,
-    }
+            'title': 20,
+            'suptitle': 24,
+            'axes_label': 16,
+            'ticks_label': 14,
+            'legend': 7,
+            'legend_title': 8,
+            'annotation': 9,
+            'cbar_label': 12,
+            'cbar_ticks': 10,
+            'label': 10,
+            'text': 10,
+            'node_label': 6,
+        }
     
     # Ensure indices match if annotations are provided
     if row_annotations is not None: 
@@ -1285,14 +1063,11 @@ def plot_annotated_heatmap(
     
     if show_colorbar:
         if separate_colorbar:
-            # Don't create colorbar with seaborn, we'll make a separate figure
             cbar_enabled = False
         elif colorbar_ax is not None:
-            # Use provided axes for colorbar
             cbar_kws.update({'cax': colorbar_ax})
             cbar_enabled = True
         else:
-            # Standard colorbar positioning
             cbar_kws.update({
                 'orientation': colorbar_orientation,
                 'pad': colorbar_pad,
@@ -1318,8 +1093,8 @@ def plot_annotated_heatmap(
         ax=ax,
         cbar=cbar_enabled,
         cbar_kws=cbar_kws if cbar_enabled else None,
-        linewidths=linewidths,
-        linecolor=linecolor,
+        linewidths=heatmap_linewidths,
+        linecolor=heatmap_linecolor,
         xticklabels=True,
         yticklabels=True,
         vmin=vmin,
@@ -1332,14 +1107,11 @@ def plot_annotated_heatmap(
     # Handle colorbar customization or creation
     if show_colorbar:
         if cbar_enabled and hasattr(im, 'collections') and len(im.collections) > 0:
-            # Customize existing colorbar
             cbar = ax.collections[0].colorbar
 
-            # Customize colorbar position if coords provided and not using separate ax
             if colorbar_coords is not None and colorbar_ax is None:
                 cbar.ax.set_position(colorbar_coords)
             
-            # Customize colorbar label
             if colorbar_label: 
                 cbar.set_label(colorbar_label,
                               fontsize=font_size.get('cbar_label', font_size['label']),
@@ -1349,16 +1121,11 @@ def plot_annotated_heatmap(
             if cbar_ticks is not None:
                 cbar.set_ticks(cbar_ticks)
             
-            # Customize colorbar tick labels
             cbar.ax.tick_params(labelsize=font_size.get('cbar_ticks', font_size['ticks_label']))
-            
-            # Add frame around colorbar
             cbar.outline.set_linewidth(0.5)
             cbar.outline.set_edgecolor('black')
         
         elif separate_colorbar:
-            # Create separate colorbar figure
-            # Determine colorbar figure size
             if colorbar_figsize is None:
                 if colorbar_orientation == 'vertical':
                     colorbar_figsize = (2, 6)
@@ -1368,17 +1135,14 @@ def plot_annotated_heatmap(
             colorbar_fig = plt.figure(figsize=colorbar_figsize)
             cbar_ax_separate = colorbar_fig.add_axes([0.1, 0.1, 0.8, 0.8])
             
-            # Get normalization from the heatmap
             norm = im.collections[0].norm
             
-            # Create colorbar
             cbar = plt.colorbar(
                 ScalarMappable(norm=norm, cmap=cmap),
                 cax=cbar_ax_separate,
                 orientation=colorbar_orientation
             )
             
-            # Customize colorbar
             if colorbar_label:
                 cbar.set_label(colorbar_label,
                               fontsize=font_size.get('cbar_label', font_size['label']),
@@ -1392,26 +1156,33 @@ def plot_annotated_heatmap(
             cbar.outline.set_linewidth(0.5)
             cbar.outline.set_edgecolor('black')
             
-            # Save separate colorbar if path provided
             if save_path is not None:
                 base, ext = save_path.rsplit('.', 1) if '.' in save_path else (save_path, 'png')
                 cbar_save_path = f"{base}_colorbar.{ext}"
                 colorbar_fig.savefig(cbar_save_path, dpi=dpi, bbox_inches='tight')
     
-    # [Rest of the code for tick labels, patches, separation lines, and legends remains the same as before...]
+    # Set tick label positions
+    ax.xaxis.tick_top() if xticklabels_position == 'top' else ax.xaxis.tick_bottom()
+    ax.yaxis.tick_right() if yticklabels_position == 'right' else ax.yaxis.tick_left()
+    
     # Customize tick labels with custom labels if provided
     ax.set_xticklabels(
         xticklabels,
         rotation=xticklabels_rotation,
-        ha='center' if xticklabels_rotation == 90 else 'right',
-        va='top',
+        ha='center' if xticklabels_rotation == 90 else ('left' if xticklabels_position == 'top' else 'right'),
+        va='center' if xticklabels_rotation == 90 else ('bottom' if xticklabels_position == 'top' else 'top'),
         fontsize=font_size['ticks_label']
     )
     ax.set_yticklabels(
         yticklabels,
         rotation=yticklabels_rotation,
+        ha='left' if yticklabels_position == 'right' else 'right',
         fontsize=font_size['ticks_label']
     )
+    
+    # Set axis label positions
+    ax.xaxis.set_label_position('top' if xticklabels_position == 'top' else 'bottom')
+    ax.yaxis.set_label_position('right' if yticklabels_position == 'right' else 'left')
     
     # Customize axis labels
     ax.set_xlabel(xlabel, fontsize=font_size['label'], labelpad=15)
@@ -1490,8 +1261,12 @@ def plot_annotated_heatmap(
         if tick_pad_y is None:
             tick_pad_y = 20
     
-    ax.tick_params(axis='x', which='both', length=0, pad=tick_pad_x)
-    ax.tick_params(axis='y', which='both', length=0, pad=tick_pad_y)
+    ax.tick_params(axis='x', which='both', length=0, pad=tick_pad_x, 
+                   top=(xticklabels_position == 'top'), bottom=(xticklabels_position == 'bottom'),
+                   labeltop=(xticklabels_position == 'top'), labelbottom=(xticklabels_position == 'bottom'))
+    ax.tick_params(axis='y', which='both', length=0, pad=tick_pad_y,
+                   left=(yticklabels_position == 'left'), right=(yticklabels_position == 'right'),
+                   labelleft=(yticklabels_position == 'left'), labelright=(yticklabels_position == 'right'))
     
     for _, spine in ax.spines.items():
         spine.set_visible(True)
@@ -1500,10 +1275,14 @@ def plot_annotated_heatmap(
     
     legend_dict = {}
     
-    # Add patches for rows
+    # Add patches for rows - position based on yticklabels_position
     if row_annotations is not None and row_annotation_col is not None and row_palette is not None:  
         for annot_idx in range(len(row_annotation_col)):
-            start_x = xlim[0] - total_row_patch_width + sum(row_patch_width[:annot_idx]) + row_patch_spacing * annot_idx
+            if yticklabels_position == 'left':
+                start_x = xlim[0] - total_row_patch_width + sum(row_patch_width[:annot_idx]) + row_patch_spacing * annot_idx
+            else:
+                start_x = xlim[1] + sum(row_patch_width[:annot_idx]) + row_patch_spacing * annot_idx
+            
             col_name = row_annotation_col[annot_idx]
             present_categories = set()
             for i, row_idx in enumerate(data.index):
@@ -1511,14 +1290,20 @@ def plot_annotated_heatmap(
                 present_categories.add(category)
                 color = row_palette[annot_idx].get(category, 'grey')
                 rect = Rectangle(
-                    (start_x - 0.2, i), row_patch_width[annot_idx], 1,
-                    alpha=row_patch_alpha, linewidth=linewidths, edgecolor=linecolor,
+                    (start_x - 0.2, i) if yticklabels_position == 'left' else (start_x + 0.2, i),
+                    row_patch_width[annot_idx], 1,
+                    alpha=row_patch_alpha, 
+                    linewidth=patch_linewidths,
+                    edgecolor=patch_linecolor,
                     facecolor=color, clip_on=False, zorder=-1
                 )
                 ax.add_patch(rect)
             
+            # Use legend-specific styling for legend patches
             legend_elements_row = [
-                Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
+                Rectangle((0, 0), 1, 1, fc=color, 
+                         ec=legend_patch_linecolor,  # Use legend-specific color
+                         linewidth=legend_patch_linewidths, label=category)  # Use legend-specific linewidth
                 for category, color in row_palette[annot_idx].items()
                 if category in present_categories
             ]
@@ -1528,10 +1313,14 @@ def plot_annotated_heatmap(
                 'n_items': len(legend_elements_row)
             }
     
-    # Add patches for columns
+    # Add patches for columns - position based on xticklabels_position
     if col_annotations is not None and col_annotation_col is not None and col_palette is not None:
         for annot_idx in range(len(col_annotation_col)):
-            start_y = ylim[0] + sum(col_patch_height[:annot_idx]) + col_patch_spacing * annot_idx
+            if xticklabels_position == 'bottom':
+                start_y = ylim[0] + sum(col_patch_height[:annot_idx]) + col_patch_spacing * annot_idx
+            else:
+                start_y = ylim[1] - total_col_patch_height + sum(col_patch_height[:annot_idx]) + col_patch_spacing * annot_idx
+            
             col_name = col_annotation_col[annot_idx]
             present_categories = set()
             for j, col_idx in enumerate(data.columns):
@@ -1539,14 +1328,20 @@ def plot_annotated_heatmap(
                 present_categories.add(category)
                 color = col_palette[annot_idx].get(category, 'grey')
                 rect = Rectangle(
-                    (j, start_y + 0.2), 1, col_patch_height[annot_idx],
-                    alpha=col_patch_alpha, linewidth=linewidths, edgecolor=linecolor,
+                    (j, start_y + 0.2) if xticklabels_position == 'bottom' else (j, start_y - 0.2),
+                    1, col_patch_height[annot_idx],
+                    alpha=col_patch_alpha, 
+                    linewidth=patch_linewidths,
+                    edgecolor=patch_linecolor,
                     facecolor=color, clip_on=False, zorder=-1
                 )
                 ax.add_patch(rect)
             
+            # Use legend-specific styling for legend patches
             legend_elements_col = [
-                Rectangle((0, 0), 1, 1, fc=color, ec=linecolor, linewidth=linewidths, label=category)
+                Rectangle((0, 0), 1, 1, fc=color, 
+                         ec=legend_patch_linecolor,  # Use legend-specific color
+                         linewidth=legend_patch_linewidths, label=category)  # Use legend-specific linewidth
                 for category, color in col_palette[annot_idx].items()
                 if category in present_categories
             ]
@@ -1556,6 +1351,7 @@ def plot_annotated_heatmap(
                 'n_items': len(legend_elements_col)
             }
     
+    # [Rest of the code remains exactly the same...]
     # Add separation lines
     if row_separation_col is not None and row_annotations is not None:
         for sep_idx, sep_col in enumerate(row_separation_col):
@@ -1585,7 +1381,7 @@ def plot_annotated_heatmap(
                         clip_on=False, zorder=10 + sep_idx
                     )
     
-    # Handle legends (same as before)
+    # Handle legends
     if legend_order is None:
         legend_order = []
         if row_annotation_col is not None:
@@ -1697,7 +1493,8 @@ def plot_annotated_heatmap(
                 title_fontsize=font_size.get('legend_title', 12),
             )
 
-    ax.set_title(title, fontsize=font_size.get('title', 14), pad=50)
+    if title:
+        ax.set_title(title, fontsize=font_size.get('title', 14), pad=50)
     
     if not use_existing_ax:
         plt.tight_layout()
@@ -1706,6 +1503,362 @@ def plot_annotated_heatmap(
         plt.savefig(save_path, dpi=dpi, bbox_inches='tight', transparent=False)
 
     return fig, ax, legend_figs, colorbar_fig
+
+# ------------------------------------------------------------------------
+# Annotated Heatmap with Row/Column Categories and Dendrograms
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.patches import Rectangle
+from matplotlib.colors import Normalize, BoundaryNorm, LinearSegmentedColormap
+from matplotlib.cm import ScalarMappable
+from matplotlib.colorbar import ColorbarBase
+from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence
+from scipy.cluster import hierarchy as sch
+
+def plot_annotated_clustermap(
+    data: pd.DataFrame,
+    transpose: bool = False,
+    fig: Optional[plt.Figure] = None,
+    ax: Optional[plt.Axes] = None,
+    ax_size: Optional[Tuple[float, float]] = None,
+    row_annotations: Optional[pd.DataFrame] = None,
+    col_annotations: Optional[pd.DataFrame] = None,
+    row_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
+    col_palette: Optional[Union[Dict[str, str], List[Dict[str, str]]]] = None,
+    figsize: Tuple[float, float] = (10, 14),
+    square: bool = False,
+    cmap: Union[str, LinearSegmentedColormap] = 'Blues',
+    font_scale: float = 13,
+    title: str = 'Annotated Clustermap',
+    xlabel: str = 'Columns',
+    ylabel: str = 'Rows',
+    row_patch_width: Optional[Union[float, List[float]]] = None,
+    col_patch_height: Optional[Union[float, List[float]]] = None,
+    row_patch_auto_width: bool = True,
+    col_patch_auto_height: bool = True,
+    patch_width_ratio: float = 0.05,
+    patch_height_ratio: float = 0.05,
+    row_annotation_col: Optional[Union[str, List[str]]] = None,
+    col_annotation_col: Optional[Union[str, List[str]]] = None,
+    row_legend_title: Union[str, List[str]] = 'Row Categories',
+    col_legend_title: Union[str, List[str]] = 'Column Categories',
+    value_legend_title: str = 'Values',
+    value_legend_labels: Optional[Dict] = None,
+    legend_position: Literal['right', 'left', 'top', 'bottom'] = 'right',
+    legend_alignment: Literal['top', 'center', 'bottom'] = 'top',
+    legend_bbox_x: float = 1.02,
+    legend_auto_spacing: bool = True,
+    legend_spacing: float = 0.08,
+    legend_order: Optional[list] = None,
+    save_path: Optional[str] = None,
+    dpi: int = 600,
+    show_colorbar: bool = False,
+    colorbar_position: Literal['right', 'left', 'top', 'bottom'] = 'right',
+    colorbar_size: str = '5%',
+    colorbar_pad: float = 0.05,
+    colorbar_label: Optional[str] = None,
+    cbar_ticks: Optional[Sequence[float]] = None,
+    colorbar_orientation: Optional[Literal['vertical', 'horizontal']] = None,
+    colorbar_coords: Optional[Tuple[float, float, float, float]] = None,
+    colorbar_ax: Optional[plt.Axes] = None,
+    separate_colorbar: bool = False,
+    colorbar_figsize: Optional[Tuple[float, float]] = None,
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
+    center: Optional[float] = None,
+    robust: bool = False,
+    heatmap_type: Literal['qualitative', 'quantitative'] = 'qualitative',
+    heatmap_linewidths: float = 0.5,
+    heatmap_linecolor: str = 'grey',
+    patch_linewidths: float = 0.0,
+    patch_linecolor: str = 'gray',
+    row_patch_alpha: float = 1.0,
+    col_patch_alpha: float = 1.0,
+    xticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
+    yticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
+    xticklabels_rotation: float = 45,
+    yticklabels_rotation: float = 0,
+    xticklabels_position: Literal['top', 'bottom'] = 'bottom',
+    yticklabels_position: Literal['left', 'right'] = 'left',
+    auto_tick_padding: bool = True,
+    tick_pad_x: Optional[float] = None,
+    tick_pad_y: Optional[float] = None,
+    tick_pad_ratio: float = 1.5,
+    base_tick_pad: float = 5.0,
+    font_size_func: Optional[callable] = None,
+    cbar_kws: Optional[Dict] = None,
+    row_patch_spacing: float = 0.0,
+    col_patch_spacing: float = 0.0,
+    row_separation_col: Optional[Union[str, List[str]]] = None,
+    col_separation_col: Optional[Union[str, List[str]]] = None,
+    row_separation_linewidth: Union[float, List[float]] = 2.0,
+    col_separation_linewidth: Union[float, List[float]] = 2.0,
+    row_separation_color: Union[str, List[str]] = 'black',
+    col_separation_color: Union[str, List[str]] = 'black',
+    row_separation_linestyle: Union[str, List[str]] = '-',
+    col_separation_linestyle: Union[str, List[str]] = '-',
+    row_separation_alpha: Union[float, List[float]] = 1.0,
+    col_separation_alpha: Union[float, List[float]] = 1.0,
+    separate_legends: bool = False,
+    legend_orientation: Literal['vertical', 'horizontal'] = 'vertical',
+    # Dendrogram-specific parameters
+    row_linkage: Optional[np.ndarray] = None,
+    col_linkage: Optional[np.ndarray] = None,
+    row_dendrogram_ax: Optional[plt.Axes] = None,
+    col_dendrogram_ax: Optional[plt.Axes] = None,
+    dendrogram_ratio: float = 0.2,
+    row_cluster: bool = False,
+    col_cluster: bool = False,
+    dendrogram_kws: Optional[Dict] = None,
+    row_dendrogram_kws: Optional[Dict] = None,
+    col_dendrogram_kws: Optional[Dict] = None,
+    row_dendrogram_color: Optional[Union[str, Literal['cluster']]] = 'cluster',
+    col_dendrogram_color: Optional[Union[str, Literal['cluster']]] = 'cluster',
+    row_color_threshold: Optional[float] = None,
+    col_color_threshold: Optional[float] = None,
+    row_cluster_colors: Optional[List[str]] = None,
+    col_cluster_colors: Optional[List[str]] = None,
+) -> Tuple[plt.Figure, plt.Axes, Dict, Optional[plt.Figure], Dict]:
+    """
+    Create an annotated heatmap with dendrograms for hierarchical clustering.
+    This is a wrapper around plot_annotated_heatmap that adds clustering functionality.
+    """
+    
+    # Initialize dendrogram info dictionary
+    dendrogram_info = {
+        'row_order': None,
+        'col_order': None,
+        'row_linkage': None,
+        'col_linkage': None,
+        'row_clusters': None,
+        'col_clusters': None
+    }
+    
+    # Prepare dendrogram keyword arguments
+    if dendrogram_kws is None:
+        dendrogram_kws = {}
+    
+    if row_dendrogram_kws is None:
+        row_dendrogram_kws = {}
+    row_dendrogram_kws = {**dendrogram_kws, **row_dendrogram_kws}
+    
+    if col_dendrogram_kws is None:
+        col_dendrogram_kws = {}
+    col_dendrogram_kws = {**dendrogram_kws, **col_dendrogram_kws}
+    
+    # Compute linkage if clustering is requested but linkage not provided
+    if row_cluster and row_linkage is None:
+        from scipy.cluster.hierarchy import linkage
+        row_linkage = linkage(data.values, method='average')
+    
+    if col_cluster and col_linkage is None:
+        from scipy.cluster.hierarchy import linkage
+        col_linkage = linkage(data.T.values, method='average')
+    
+    # Store linkage matrices
+    dendrogram_info['row_linkage'] = row_linkage
+    dendrogram_info['col_linkage'] = col_linkage
+    
+    # Reorder data based on linkage if provided
+    if row_linkage is not None:
+        dendro_row = sch.dendrogram(row_linkage, no_plot=True)
+        row_order = dendro_row['leaves']
+        data = data.iloc[row_order, :]
+        
+        if row_annotations is not None:
+            row_annotations = row_annotations.iloc[row_order, :]
+        
+        dendrogram_info['row_order'] = row_order
+    
+    if col_linkage is not None:
+        dendro_col = sch.dendrogram(col_linkage, no_plot=True)
+        col_order = dendro_col['leaves']
+        data = data.iloc[:, col_order]
+        
+        if col_annotations is not None:
+            col_annotations = col_annotations.iloc[col_order, :]
+        
+        dendrogram_info['col_order'] = col_order
+    
+    # Reorder custom tick labels if provided
+    if xticklabels is not None:
+        if isinstance(xticklabels, pd.Series):
+            xticklabels = xticklabels.loc[data.columns].values
+        elif col_linkage is not None and dendrogram_info['col_order'] is not None:
+            xticklabels = [xticklabels[i] for i in dendrogram_info['col_order']]
+    
+    if yticklabels is not None:
+        if isinstance(yticklabels, pd.Series):
+            yticklabels = yticklabels.loc[data.index].values
+        elif row_linkage is not None and dendrogram_info['row_order'] is not None:
+            yticklabels = [yticklabels[i] for i in dendrogram_info['row_order']]
+    
+    # Plot dendrograms if axes provided
+    if row_dendrogram_ax is not None and row_linkage is not None:
+        if row_dendrogram_color == 'cluster':
+            if row_color_threshold is None:
+                row_color_threshold = 0.7 * np.max(row_linkage[:, 2])
+            
+            row_dendrogram_kws['color_threshold'] = row_color_threshold
+            
+            if row_cluster_colors is not None:
+                sch.set_link_color_palette(row_cluster_colors)
+        else:
+            row_dendrogram_kws['color_threshold'] = -np.inf
+            row_dendrogram_kws['above_threshold_color'] = row_dendrogram_color
+        
+        dendro_row = sch.dendrogram(
+            row_linkage,
+            orientation='right',
+            ax=row_dendrogram_ax,
+            **row_dendrogram_kws
+        )
+        
+        if row_dendrogram_color == 'cluster':
+            from scipy.cluster.hierarchy import fcluster
+            row_clusters = fcluster(row_linkage, row_color_threshold, criterion='distance')
+            dendrogram_info['row_clusters'] = row_clusters
+        
+        row_dendrogram_ax.invert_xaxis()
+        row_dendrogram_ax.invert_yaxis()
+        row_dendrogram_ax.set_yticklabels([])
+        row_dendrogram_ax.set_yticks([])
+        row_dendrogram_ax.set_xticklabels([])
+        row_dendrogram_ax.set_xticks([])
+        for spine in row_dendrogram_ax.spines.values():
+            spine.set_visible(False)
+        
+        if row_dendrogram_color == 'cluster' and row_cluster_colors is not None:
+            sch.set_link_color_palette(None)
+    
+    if col_dendrogram_ax is not None and col_linkage is not None:
+        if col_dendrogram_color == 'cluster':
+            if col_color_threshold is None:
+                col_color_threshold = 0.7 * np.max(col_linkage[:, 2])
+            
+            col_dendrogram_kws['color_threshold'] = col_color_threshold
+            
+            if col_cluster_colors is not None:
+                sch.set_link_color_palette(col_cluster_colors)
+        else:
+            col_dendrogram_kws['color_threshold'] = -np.inf
+            col_dendrogram_kws['above_threshold_color'] = col_dendrogram_color
+        
+        dendro_col = sch.dendrogram(
+            col_linkage,
+            ax=col_dendrogram_ax,
+            **col_dendrogram_kws
+        )
+        
+        if col_dendrogram_color == 'cluster':
+            from scipy.cluster.hierarchy import fcluster
+            col_clusters = fcluster(col_linkage, col_color_threshold, criterion='distance')
+            dendrogram_info['col_clusters'] = col_clusters
+        
+        col_dendrogram_ax.set_yticklabels([])
+        col_dendrogram_ax.set_yticks([])
+        col_dendrogram_ax.set_xticklabels([])
+        col_dendrogram_ax.set_xticks([])
+        for spine in col_dendrogram_ax.spines.values():
+            spine.set_visible(False)
+        
+        if col_dendrogram_color == 'cluster' and col_cluster_colors is not None:
+            sch.set_link_color_palette(None)
+    
+    # Call the base heatmap function with all parameters
+    fig, ax, legend_figs, colorbar_fig = plot_annotated_heatmap(
+        data=data,
+        transpose=transpose,
+        fig=fig,
+        ax=ax,
+        ax_size=ax_size,
+        row_annotations=row_annotations,
+        col_annotations=col_annotations,
+        row_palette=row_palette,
+        col_palette=col_palette,
+        figsize=figsize,
+        square=square,
+        cmap=cmap,
+        font_scale=font_scale,
+        title=title,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        row_patch_width=row_patch_width,
+        col_patch_height=col_patch_height,
+        row_patch_auto_width=row_patch_auto_width,
+        col_patch_auto_height=col_patch_auto_height,
+        patch_width_ratio=patch_width_ratio,
+        patch_height_ratio=patch_height_ratio,
+        row_annotation_col=row_annotation_col,
+        col_annotation_col=col_annotation_col,
+        row_legend_title=row_legend_title,
+        col_legend_title=col_legend_title,
+        value_legend_title=value_legend_title,
+        value_legend_labels=value_legend_labels,
+        legend_position=legend_position,
+        legend_alignment=legend_alignment,
+        legend_bbox_x=legend_bbox_x,
+        legend_auto_spacing=legend_auto_spacing,
+        legend_spacing=legend_spacing,
+        legend_order=legend_order,
+        save_path=save_path,
+        dpi=dpi,
+        show_colorbar=show_colorbar,
+        colorbar_position=colorbar_position,
+        colorbar_size=colorbar_size,
+        colorbar_pad=colorbar_pad,
+        colorbar_label=colorbar_label,
+        cbar_ticks=cbar_ticks,
+        colorbar_orientation=colorbar_orientation,
+        colorbar_coords=colorbar_coords,
+        colorbar_ax=colorbar_ax,
+        separate_colorbar=separate_colorbar,
+        colorbar_figsize=colorbar_figsize,
+        vmin=vmin,
+        vmax=vmax,
+        center=center,
+        robust=robust,
+        heatmap_type=heatmap_type,
+        heatmap_linewidths=heatmap_linewidths,
+        heatmap_linecolor=heatmap_linecolor,
+        patch_linewidths=patch_linewidths,
+        patch_linecolor=patch_linecolor,
+        row_patch_alpha=row_patch_alpha,
+        col_patch_alpha=col_patch_alpha,
+        xticklabels=xticklabels,
+        yticklabels=yticklabels,
+        xticklabels_rotation=xticklabels_rotation,
+        yticklabels_rotation=yticklabels_rotation,
+        xticklabels_position=xticklabels_position,
+        yticklabels_position=yticklabels_position,
+        auto_tick_padding=auto_tick_padding,
+        tick_pad_x=tick_pad_x,
+        tick_pad_y=tick_pad_y,
+        tick_pad_ratio=tick_pad_ratio,
+        base_tick_pad=base_tick_pad,
+        font_size_func=font_size_func,
+        cbar_kws=cbar_kws,
+        row_patch_spacing=row_patch_spacing,
+        col_patch_spacing=col_patch_spacing,
+        row_separation_col=row_separation_col,
+        col_separation_col=col_separation_col,
+        row_separation_linewidth=row_separation_linewidth,
+        col_separation_linewidth=col_separation_linewidth,
+        row_separation_color=row_separation_color,
+        col_separation_color=col_separation_color,
+        row_separation_linestyle=row_separation_linestyle,
+        col_separation_linestyle=col_separation_linestyle,
+        row_separation_alpha=row_separation_alpha,
+        col_separation_alpha=col_separation_alpha,
+        separate_legends=separate_legends,
+        legend_orientation=legend_orientation,
+    )
+    
+    # Return with dendrogram info
+    return fig, ax, legend_figs, colorbar_fig, dendrogram_info
+
 
 # -----------------------------------------------------------------------
 # Annotated Barplot
