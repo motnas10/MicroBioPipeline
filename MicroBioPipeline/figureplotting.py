@@ -1286,14 +1286,21 @@ def plot_annotated_heatmap(
     ax.set_xticklabels(
         xticklabels,
         rotation=xticklabels_rotation,
-        ha='center' if xticklabels_rotation == 90 else ('left' if xticklabels_position == 'top' else 'right'),
-        va='center' if xticklabels_rotation == 90 else ('bottom' if xticklabels_position == 'top' else 'top'),
+        ha='center' if xticklabels_rotation == 90 else (
+            ('left' if xticklabels_rotation < 0 else 'right') if xticklabels_position == 'bottom' 
+            else ('right' if xticklabels_rotation < 0 else 'left')
+        ),
+        va='top' if xticklabels_position == 'bottom' else 'bottom',
         fontsize=font_size['ticks_label']
     )
     ax.set_yticklabels(
         yticklabels,
         rotation=yticklabels_rotation,
-        ha='left' if yticklabels_position == 'right' else 'right',
+        ha='right' if yticklabels_position == 'left' else 'left',
+        va='center' if yticklabels_rotation == 90 else (
+            ('top' if yticklabels_rotation > 0 else 'bottom') if yticklabels_position == 'left'
+            else ('bottom' if yticklabels_rotation > 0 else 'top')
+        ),
         fontsize=font_size['ticks_label']
     )
     
