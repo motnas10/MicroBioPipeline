@@ -1297,7 +1297,7 @@ def plot_annotated_heatmap(
         yticklabels,
         rotation=yticklabels_rotation,
         ha='right' if yticklabels_position == 'left' else 'left',
-        va='center' if yticklabels_rotation == 90 else (
+        va='center' if yticklabels_rotation == 0 else (
             ('top' if yticklabels_rotation > 0 else 'bottom') if yticklabels_position == 'left'
             else ('bottom' if yticklabels_rotation > 0 else 'top')
         ),
