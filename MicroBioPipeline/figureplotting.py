@@ -712,11 +712,12 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Circle
 from matplotlib.colors import Normalize, BoundaryNorm, LinearSegmentedColormap
 from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import ColorbarBase
-from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence
+from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence, Callable
+
 
 def plot_annotated_heatmap(
     data: pd.DataFrame,
@@ -790,7 +791,7 @@ def plot_annotated_heatmap(
     tick_pad_y: Optional[float] = None,
     tick_pad_ratio: float = 1.5,
     base_tick_pad: float = 5.0,
-    font_size_func: Optional[callable] = None,
+    font_size_func: Optional[Callable] = None,
     cbar_kws: Optional[Dict] = None,
     row_patch_spacing: float = 0.0,
     col_patch_spacing: float = 0.0,
@@ -806,39 +807,90 @@ def plot_annotated_heatmap(
     col_separation_alpha: Union[float, List[float]] = 1.0,
     separate_legends: bool = False,
     legend_orientation: Literal['vertical', 'horizontal'] = 'vertical',
+    # Significance overlay parameters
+    significance_data: Optional[pd.DataFrame] = None,
+    significance_func: Optional[Callable] = None,
+    significance_marker: Literal['circle', 'star', 'asterisk', 'text'] = 'circle',
+    significance_size_map: Optional[Dict[str, float]] = None,
+    significance_color: str = 'black',
+    significance_alpha: float = 1.0,
+    significance_linewidth: float = 0.5,
+    significance_edgecolor: Optional[str] = 'gray',  # NEW PARAMETER
+    significance_text_size: Optional[float] = None,
+    show_significance_legend: bool = True,
+    significance_legend_title: str = 'Significance',
+    circle_background: str = 'white',
 ) -> Tuple[plt.Figure, plt.Axes, Dict, Optional[plt.Figure]]:
     """
     Create an annotated heatmap with colored patches for row and column categories. 
     Supports both qualitative (binary/categorical) and quantitative (gradient) heatmaps.
-    Now supports multiple annotation columns from a single DataFrame.
+    Now supports significance overlays with circles colored by data values.
     
     Parameters
     ----------
-    [... previous parameters ...]
+    [... all previous parameters ...]
     
-    patch_linewidths : float, default 0.0
-        Width of lines around annotation patches on the heatmap.
-    patch_linecolor : str, default 'grey'
-        Color of lines around annotation patches on the heatmap.
-    legend_patch_linewidths : float, optional
-        Width of lines around patches in the legend. If None, uses patch_linewidths.
-        This allows you to have borders in the legend even when patches on the heatmap have no borders.
-    legend_patch_linecolor : str, optional
-        Color of lines around patches in the legend. If None, uses patch_linecolor.
+    significance_data : pd.DataFrame, optional
+        DataFrame with same shape as data containing p-values or significance levels.
+        Will be overlaid on heatmap as circles sized by significance and colored by data values.
+    significance_func : callable, optional
+        Function to convert p-values to symbols. Should accept a float (p-value) 
+        and return a string (symbol). If None, uses default categorization:
+        p <= 1e-4: '****', p <= 1e-3: '***', p <= 1e-2: '**', p <= 5e-2: '*', else: 'ns'
+    significance_marker : str, default 'circle'
+        Type of marker to use: 'circle' (filled, colored by data), 'star', 'asterisk', or 'text'.
+    significance_size_map : dict, optional
+        Dictionary mapping symbols to marker sizes (for scatter plot). 
+        Default: {'****': 400, '***': 300, '**': 200, '*': 100, 'ns': 20}
+        Note: 'ns' now has a small size (20) instead of 0.
+    significance_color : str, default 'black'
+        Color of significance markers (only used for non-circle markers).
+    significance_alpha : float, default 1.0
+        Transparency of significance markers (0.0-1.0).
+    significance_linewidth : float, default 0.5
+        Line width for marker edges. Set to 0 for no edge.
+    significance_text_size : float, optional
+        Font size for text/asterisk markers.
+    show_significance_legend : bool, default True
+        Whether to show legend for significance markers.
+    significance_legend_title : str, default 'Significance'
+        Title for significance legend.
+    circle_background : str, default 'white'
+        Background color for heatmap cells when using circle markers.
+        This creates the white cells with colored circles on top.
     
-    [... rest of parameters ...]
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The main figure object.
+    ax : matplotlib.axes.Axes
+        The axes object containing the heatmap.
+    legend_figs : dict
+        Dictionary of legend figure objects.
+    colorbar_fig : matplotlib.figure.Figure or None
+        Separate colorbar figure if separate_colorbar=True.
     
     Examples
     --------
-    >>> # Patches without borders, but legend with borders
+    >>> # Correlation heatmap with circles colored by correlation, sized by significance
     >>> fig, ax, legends, cbar = plot_annotated_heatmap(
-    ...     data=expression_data,
-    ...     row_annotations=df_annotations,
-    ...     row_annotation_col='category',
-    ...     row_palette={'A': 'red', 'B': 'blue'},
-    ...     patch_linewidths=0.0,           # No borders on heatmap patches
-    ...     legend_patch_linewidths=1.0,    # But show borders in legend
-    ...     legend_patch_linecolor='black'
+    ...     data=correlation_matrix,
+    ...     significance_data=pvalue_matrix,
+    ...     significance_marker='circle',
+    ...     significance_linewidth=0,
+    ...     significance_size_map={
+    ...         '****': 400,   # p <= 0.0001
+    ...         '***': 300,    # p <= 0.001
+    ...         '**': 200,     # p <= 0.01
+    ...         '*': 100,      # p <= 0.05
+    ...         'ns': 20       # not significant - small circle
+    ...     },
+    ...     cmap='RdBu_r',
+    ...     center=0,
+    ...     vmin=-1,
+    ...     vmax=1,
+    ...     square=True,
+    ...     circle_background='white'
     ... )
     """
     
@@ -847,8 +899,6 @@ def plot_annotated_heatmap(
         legend_patch_linewidths = patch_linewidths
     if legend_patch_linecolor is None:
         legend_patch_linecolor = patch_linecolor
-    
-    # [All your existing code until the legend creation sections...]
     
     # Validate fig and ax parameters
     if (fig is None) != (ax is None):
@@ -860,6 +910,10 @@ def plot_annotated_heatmap(
     if transpose:
         # Transpose main data
         data = data.T
+        
+        # Transpose significance data if provided
+        if significance_data is not None:
+            significance_data = significance_data.T
 
         # Swap annotations
         row_annotations, col_annotations = col_annotations, row_annotations
@@ -894,6 +948,12 @@ def plot_annotated_heatmap(
             row_separation_linestyle,
         )
         row_separation_alpha, col_separation_alpha = col_separation_alpha, row_separation_alpha
+
+    # Validate significance data if provided
+    if significance_data is not None:
+        assert significance_data.shape == data.shape, "significance_data must match data shape"
+        assert (significance_data.index == data.index).all(), "significance_data index must match data index"
+        assert (significance_data.columns == data.columns).all(), "significance_data columns must match data columns"
 
     # Convert single values to lists for uniform handling
     if row_annotation_col is not None and not isinstance(row_annotation_col, list):
@@ -955,9 +1015,6 @@ def plot_annotated_heatmap(
         assert len(yticklabels) == len(data.index), "yticklabels must match data.index length"
     else:
         yticklabels = data.index
-    
-    # [Continue with all validation code...]
-    # [All the plotting code remains the same until legend creation...]
     
     # Validate list lengths for row annotations
     if row_annotation_col is not None: 
@@ -1061,71 +1118,72 @@ def plot_annotated_heatmap(
     # Determine how to handle colorbar
     colorbar_fig = None
     
-    if show_colorbar:
-        if separate_colorbar:
-            cbar_enabled = False
-        elif colorbar_ax is not None:
-            cbar_kws.update({'cax': colorbar_ax})
-            cbar_enabled = True
-        else:
-            cbar_kws.update({
-                'orientation': colorbar_orientation,
-                'pad': colorbar_pad,
-                'label': colorbar_label if colorbar_label else '',
-                'location': colorbar_position
-            })
-            
-            if 'fraction' not in cbar_kws:
-                if isinstance(colorbar_size, str) and '%' in colorbar_size:  
-                    size_value = float(colorbar_size.rstrip('%')) / 100
-                else:  
-                    size_value = 0.03
-                cbar_kws['fraction'] = size_value
-            
-            cbar_enabled = True
+    # If using circle markers with significance, plot white background
+    if significance_data is not None and significance_marker == 'circle':
+        # Plot white background heatmap
+        im = sns.heatmap(
+            data,
+            cmap=[circle_background],  # Single color (white)
+            ax=ax,
+            cbar=False,  # No colorbar for background
+            linewidths=heatmap_linewidths,
+            linecolor=heatmap_linecolor,
+            xticklabels=True,
+            yticklabels=True,
+            vmin=vmin,
+            vmax=vmax,
+            square=True if square else False
+        )
+        cbar_enabled = False  # We'll handle colorbar separately
     else:
-        cbar_enabled = False
-    
-    # Plot the heatmap using Seaborn
-    im = sns.heatmap(
-        data,
-        cmap=cmap,
-        ax=ax,
-        cbar=cbar_enabled,
-        cbar_kws=cbar_kws if cbar_enabled else None,
-        linewidths=heatmap_linewidths,
-        linecolor=heatmap_linecolor,
-        xticklabels=True,
-        yticklabels=True,
-        vmin=vmin,
-        vmax=vmax,
-        center=center,
-        robust=robust,
-        square=True if square else False
-    )
+        # Normal heatmap plotting
+        if show_colorbar:
+            if separate_colorbar:
+                cbar_enabled = False
+            elif colorbar_ax is not None:
+                cbar_kws.update({'cax': colorbar_ax})
+                cbar_enabled = True
+            else:
+                cbar_kws.update({
+                    'orientation': colorbar_orientation,
+                    'pad': colorbar_pad,
+                    'label': colorbar_label if colorbar_label else '',
+                    'location': colorbar_position
+                })
+                
+                if 'fraction' not in cbar_kws:
+                    if isinstance(colorbar_size, str) and '%' in colorbar_size:  
+                        size_value = float(colorbar_size.rstrip('%')) / 100
+                    else:  
+                        size_value = 0.03
+                    cbar_kws['fraction'] = size_value
+                
+                cbar_enabled = True
+        else:
+            cbar_enabled = False
+        
+        # Plot the heatmap using Seaborn
+        im = sns.heatmap(
+            data,
+            cmap=cmap,
+            ax=ax,
+            cbar=cbar_enabled,
+            cbar_kws=cbar_kws if cbar_enabled else None,
+            linewidths=heatmap_linewidths,
+            linecolor=heatmap_linecolor,
+            xticklabels=True,
+            yticklabels=True,
+            vmin=vmin,
+            vmax=vmax,
+            center=center,
+            robust=robust,
+            square=True if square else False
+        )
     
     # Handle colorbar customization or creation
-    if show_colorbar:
-        if cbar_enabled and hasattr(im, 'collections') and len(im.collections) > 0:
-            cbar = ax.collections[0].colorbar
-
-            if colorbar_coords is not None and colorbar_ax is None:
-                cbar.ax.set_position(colorbar_coords)
-            
-            if colorbar_label: 
-                cbar.set_label(colorbar_label,
-                              fontsize=font_size.get('cbar_label', font_size['label']),
-                              rotation=90 if colorbar_orientation == 'vertical' else 0,
-                              labelpad=10)
-            
-            if cbar_ticks is not None:
-                cbar.set_ticks(cbar_ticks)
-            
-            cbar.ax.tick_params(labelsize=font_size.get('cbar_ticks', font_size['ticks_label']))
-            cbar.outline.set_linewidth(0.5)
-            cbar.outline.set_edgecolor('black')
-        
-        elif separate_colorbar:
+    # For circle markers, create colorbar manually from data colormap
+    if significance_data is not None and significance_marker == 'circle' and show_colorbar:
+        if separate_colorbar:
             if colorbar_figsize is None:
                 if colorbar_orientation == 'vertical':
                     colorbar_figsize = (2, 6)
@@ -1135,7 +1193,15 @@ def plot_annotated_heatmap(
             colorbar_fig = plt.figure(figsize=colorbar_figsize)
             cbar_ax_separate = colorbar_fig.add_axes([0.1, 0.1, 0.8, 0.8])
             
-            norm = im.collections[0].norm
+            # Create normalization and colorbar
+            if center is not None:
+                from matplotlib.colors import TwoSlopeNorm
+                norm = TwoSlopeNorm(vmin=vmin if vmin is not None else data.min().min(),
+                                   vcenter=center,
+                                   vmax=vmax if vmax is not None else data.max().max())
+            else:
+                norm = Normalize(vmin=vmin if vmin is not None else data.min().min(),
+                               vmax=vmax if vmax is not None else data.max().max())
             
             cbar = plt.colorbar(
                 ScalarMappable(norm=norm, cmap=cmap),
@@ -1160,6 +1226,56 @@ def plot_annotated_heatmap(
                 base, ext = save_path.rsplit('.', 1) if '.' in save_path else (save_path, 'png')
                 cbar_save_path = f"{base}_colorbar.{ext}"
                 colorbar_fig.savefig(cbar_save_path, dpi=dpi, bbox_inches='tight')
+        elif colorbar_ax is not None or colorbar_coords is not None:
+            # Create colorbar in specified location
+            if center is not None:
+                from matplotlib.colors import TwoSlopeNorm
+                norm = TwoSlopeNorm(vmin=vmin if vmin is not None else data.min().min(),
+                                   vcenter=center,
+                                   vmax=vmax if vmax is not None else data.max().max())
+            else:
+                norm = Normalize(vmin=vmin if vmin is not None else data.min().min(),
+                               vmax=vmax if vmax is not None else data.max().max())
+            
+            if colorbar_ax is not None:
+                cbar = plt.colorbar(ScalarMappable(norm=norm, cmap=cmap), cax=colorbar_ax)
+            else:
+                cbar = plt.colorbar(ScalarMappable(norm=norm, cmap=cmap), ax=ax, 
+                                   orientation=colorbar_orientation, pad=colorbar_pad)
+                if colorbar_coords is not None:
+                    cbar.ax.set_position(colorbar_coords)
+            
+            if colorbar_label:
+                cbar.set_label(colorbar_label,
+                              fontsize=font_size.get('cbar_label', font_size['label']),
+                              rotation=90 if colorbar_orientation == 'vertical' else 0,
+                              labelpad=10)
+            
+            if cbar_ticks is not None:
+                cbar.set_ticks(cbar_ticks)
+            
+            cbar.ax.tick_params(labelsize=font_size.get('cbar_ticks', font_size['ticks_label']))
+            cbar.outline.set_linewidth(0.5)
+            cbar.outline.set_edgecolor('black')
+    
+    elif show_colorbar and cbar_enabled and hasattr(im, 'collections') and len(im.collections) > 0:
+        cbar = ax.collections[0].colorbar
+
+        if colorbar_coords is not None and colorbar_ax is None:
+            cbar.ax.set_position(colorbar_coords)
+        
+        if colorbar_label: 
+            cbar.set_label(colorbar_label,
+                          fontsize=font_size.get('cbar_label', font_size['label']),
+                          rotation=90 if colorbar_orientation == 'vertical' else 0,
+                          labelpad=10)
+        
+        if cbar_ticks is not None:
+            cbar.set_ticks(cbar_ticks)
+        
+        cbar.ax.tick_params(labelsize=font_size.get('cbar_ticks', font_size['ticks_label']))
+        cbar.outline.set_linewidth(0.5)
+        cbar.outline.set_edgecolor('black')
     
     # Set tick label positions
     ax.xaxis.tick_top() if xticklabels_position == 'top' else ax.xaxis.tick_bottom()
@@ -1299,11 +1415,10 @@ def plot_annotated_heatmap(
                 )
                 ax.add_patch(rect)
             
-            # Use legend-specific styling for legend patches
             legend_elements_row = [
                 Rectangle((0, 0), 1, 1, fc=color, 
-                         ec=legend_patch_linecolor,  # Use legend-specific color
-                         linewidth=legend_patch_linewidths, label=category)  # Use legend-specific linewidth
+                         ec=legend_patch_linecolor,
+                         linewidth=legend_patch_linewidths, label=category)
                 for category, color in row_palette[annot_idx].items()
                 if category in present_categories
             ]
@@ -1337,11 +1452,10 @@ def plot_annotated_heatmap(
                 )
                 ax.add_patch(rect)
             
-            # Use legend-specific styling for legend patches
             legend_elements_col = [
                 Rectangle((0, 0), 1, 1, fc=color, 
-                         ec=legend_patch_linecolor,  # Use legend-specific color
-                         linewidth=legend_patch_linewidths, label=category)  # Use legend-specific linewidth
+                         ec=legend_patch_linecolor,
+                         linewidth=legend_patch_linewidths, label=category)
                 for category, color in col_palette[annot_idx].items()
                 if category in present_categories
             ]
@@ -1351,7 +1465,6 @@ def plot_annotated_heatmap(
                 'n_items': len(legend_elements_col)
             }
     
-    # [Rest of the code remains exactly the same...]
     # Add separation lines
     if row_separation_col is not None and row_annotations is not None:
         for sep_idx, sep_col in enumerate(row_separation_col):
@@ -1381,13 +1494,213 @@ def plot_annotated_heatmap(
                         clip_on=False, zorder=10 + sep_idx
                     )
     
-    # Handle legends
+    # Add significance markers if provided
+    if significance_data is not None:
+        # Default significance function
+        if significance_func is None:
+            def default_pval_to_symbol(p):
+                if p <= 1e-4:
+                    return '****'
+                elif p <= 1e-3:
+                    return '***'
+                elif p <= 1e-2:
+                    return '**'
+                elif p <= 5e-2:
+                    return '*'
+                else:
+                    return 'ns'
+            significance_func = default_pval_to_symbol
+        
+        # Default size mapping - now 'ns' has a small size instead of 0
+        if significance_size_map is None:
+            significance_size_map = {
+                '****': 300,   # Largest
+                '***': 225,
+                '**': 150,
+                '*': 80,
+                'ns': 30       # Small circle for non-significant
+            }
+        
+        # Calculate text size if not provided
+        if significance_text_size is None:
+            significance_text_size = font_size.get('annotation', 9)
+        
+        if significance_marker == 'circle':
+            # Create colormap normalizer for data values
+            if center is not None:
+                from matplotlib.colors import TwoSlopeNorm
+                norm = TwoSlopeNorm(vmin=vmin if vmin is not None else data.min().min(),
+                                   vcenter=center,
+                                   vmax=vmax if vmax is not None else data.max().max())
+            else:
+                norm = Normalize(vmin=vmin if vmin is not None else data.min().min(),
+                               vmax=vmax if vmax is not None else data.max().max())
+            
+            # Get colormap
+            if isinstance(cmap, str):
+                from matplotlib import cm
+                colormap = cm.get_cmap(cmap)
+            else:
+                colormap = cmap
+            
+            # Collect data for all circles
+            x_coords = []
+            y_coords = []
+            sizes = []
+            colors = []
+            
+            # Apply significance markers
+            for i, row_idx in enumerate(data.index):
+                for j, col_idx in enumerate(data.columns):
+                    pval = significance_data.loc[row_idx, col_idx]
+                    value = data.loc[row_idx, col_idx]
+                    
+                    # Skip if either is NaN
+                    if pd.isna(pval) or pd.isna(value):
+                        continue
+                    
+                    # Get significance symbol and size
+                    symbol = significance_func(pval)
+                    marker_size = significance_size_map.get(symbol, 20)
+                    
+                    # Cell center coordinates
+                    x_center = j + 0.5
+                    y_center = i + 0.5
+                    
+                    # Get color from data value
+                    color = colormap(norm(value))
+                    
+                    x_coords.append(x_center)
+                    y_coords.append(y_center)
+                    sizes.append(marker_size)
+                    colors.append(color)
+            
+            # Plot all circles at once
+            if len(x_coords) > 0:
+                # Determine edge colors
+                if significance_linewidth > 0:
+                    if significance_edgecolor is not None:
+                        edge_colors = significance_edgecolor
+                    else:
+                        edge_colors = colors  # Use same as fill color
+                else:
+                    edge_colors = 'none'
+                
+                ax.scatter(
+                    x_coords, y_coords,
+                    s=sizes,
+                    c=colors,
+                    alpha=significance_alpha,
+                    edgecolors=edge_colors,
+                    linewidths=significance_linewidth,
+                    zorder=10
+                )
+        
+        else:
+            # Original code for other marker types
+            x_coords = []
+            y_coords = []
+            sizes = []
+            
+            for i, row_idx in enumerate(data.index):
+                for j, col_idx in enumerate(data.columns):
+                    pval = significance_data.loc[row_idx, col_idx]
+                    
+                    if pd.isna(pval):
+                        continue
+                    
+                    symbol = significance_func(pval)
+                    marker_size = significance_size_map.get(symbol, 0)
+                    
+                    if marker_size > 0:
+                        x_center = j + 0.5
+                        y_center = i + 0.5
+                        
+                        if significance_marker == 'star':
+                            ax.scatter(
+                                x_center, y_center,
+                                marker='*',
+                                s=marker_size,
+                                color=significance_color,
+                                alpha=significance_alpha,
+                                linewidths=significance_linewidth,
+                                edgecolors=significance_color,
+                                zorder=10
+                            )
+                        
+                        elif significance_marker in ['asterisk', 'text']:
+                            display_symbol = symbol if significance_marker == 'text' else symbol.replace('ns', '')
+                            if display_symbol:
+                                ax.text(
+                                    x_center, y_center,
+                                    display_symbol,
+                                    ha='center', va='center',
+                                    fontsize=significance_text_size,
+                                    color=significance_color,
+                                    alpha=significance_alpha,
+                                    weight='bold',
+                                    zorder=10
+                                )
+        
+        # Add significance legend
+        if show_significance_legend:
+            from matplotlib.lines import Line2D
+            sig_handles = []
+            for symbol in sorted(significance_size_map.keys(), 
+                               key=lambda x: significance_size_map[x], reverse=True):
+                size = significance_size_map[symbol]
+                if size > 0:
+                    if significance_marker == 'circle':
+                        # For circle legend, use gray color as example
+                        handle = Line2D(
+                            [0], [0],
+                            marker='o',
+                            color='w',
+                            markerfacecolor='gray',
+                            markeredgecolor='none',
+                            markersize=np.sqrt(size)/2.5,
+                            label=symbol,
+                            linestyle='None'
+                        )
+                    elif significance_marker == 'star':
+                        handle = Line2D(
+                            [0], [0],
+                            marker='*',
+                            color='w',
+                            markerfacecolor=significance_color,
+                            markeredgecolor=significance_color,
+                            markersize=np.sqrt(size)/2.5,
+                            label=symbol,
+                            linestyle='None'
+                        )
+                    else:
+                        handle = Line2D(
+                            [0], [0],
+                            marker=f'${symbol}$',
+                            color='w',
+                            markerfacecolor=significance_color,
+                            markersize=10,
+                            label=symbol,
+                            linestyle='None'
+                        )
+                    sig_handles.append(handle)
+            
+            if sig_handles:
+                legend_dict['significance'] = {
+                    'handles': sig_handles,
+                    'title': significance_legend_title,
+                    'n_items': len(sig_handles)
+                }
+    
+    # Handle legends (rest of the code remains the same)
     if legend_order is None:
         legend_order = []
         if row_annotation_col is not None:
             legend_order.extend([f'row_{i}' for i in range(len(row_annotation_col))])
         if col_annotation_col is not None:
             legend_order.extend([f'col_{i}' for i in range(len(col_annotation_col))])
+        if significance_data is not None and show_significance_legend:
+            legend_order.append('significance')
         legend_order.append('value')
     
     legends_to_plot = [key for key in legend_order if key in legend_dict]
@@ -1514,7 +1827,7 @@ from matplotlib.patches import Rectangle
 from matplotlib.colors import Normalize, BoundaryNorm, LinearSegmentedColormap
 from matplotlib.cm import ScalarMappable
 from matplotlib.colorbar import ColorbarBase
-from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence
+from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence, Callable
 from scipy.cluster import hierarchy as sch
 
 def plot_annotated_clustermap(
@@ -1574,6 +1887,8 @@ def plot_annotated_clustermap(
     heatmap_linecolor: str = 'grey',
     patch_linewidths: float = 0.0,
     patch_linecolor: str = 'gray',
+    legend_patch_linewidths: Optional[float] = 0.5,
+    legend_patch_linecolor: Optional[str] = 'gray',
     row_patch_alpha: float = 1.0,
     col_patch_alpha: float = 1.0,
     xticklabels: Optional[Union[pd.Series, List, np.ndarray]] = None,
@@ -1587,7 +1902,7 @@ def plot_annotated_clustermap(
     tick_pad_y: Optional[float] = None,
     tick_pad_ratio: float = 1.5,
     base_tick_pad: float = 5.0,
-    font_size_func: Optional[callable] = None,
+    font_size_func: Optional[Callable] = None,
     cbar_kws: Optional[Dict] = None,
     row_patch_spacing: float = 0.0,
     col_patch_spacing: float = 0.0,
@@ -1603,6 +1918,19 @@ def plot_annotated_clustermap(
     col_separation_alpha: Union[float, List[float]] = 1.0,
     separate_legends: bool = False,
     legend_orientation: Literal['vertical', 'horizontal'] = 'vertical',
+    # Significance overlay parameters
+    significance_data: Optional[pd.DataFrame] = None,
+    significance_func: Optional[Callable] = None,
+    significance_marker: Literal['circle', 'star', 'asterisk', 'text'] = 'circle',
+    significance_size_map: Optional[Dict[str, float]] = None,
+    significance_color: str = 'black',
+    significance_alpha: float = 1.0,
+    significance_linewidth: float = 0.5,
+    significance_edgecolor: Optional[str] = None,
+    significance_text_size: Optional[float] = None,
+    show_significance_legend: bool = True,
+    significance_legend_title: str = 'Significance',
+    circle_background: str = 'white',
     # Dendrogram-specific parameters
     row_linkage: Optional[np.ndarray] = None,
     col_linkage: Optional[np.ndarray] = None,
@@ -1624,6 +1952,49 @@ def plot_annotated_clustermap(
     """
     Create an annotated heatmap with dendrograms for hierarchical clustering.
     This is a wrapper around plot_annotated_heatmap that adds clustering functionality.
+    
+    Parameters
+    ----------
+    [... all previous parameters ...]
+    
+    significance_data : pd.DataFrame, optional
+        DataFrame with same shape as data containing p-values or significance levels.
+        Will be reordered according to clustering.
+    significance_func : callable, optional
+        Function to convert p-values to symbols.
+    significance_marker : str, default 'circle'
+        Type of marker: 'circle', 'star', 'asterisk', or 'text'.
+    significance_size_map : dict, optional
+        Mapping symbols to marker sizes.
+    significance_color : str, default 'black'
+        Color of significance markers (for non-circle markers).
+    significance_alpha : float, default 1.0
+        Transparency of significance markers.
+    significance_linewidth : float, default 0.5
+        Line width for marker edges.
+    significance_edgecolor : str, optional
+        Edge color for circle markers. If None, uses same as fill.
+    significance_text_size : float, optional
+        Font size for text markers.
+    show_significance_legend : bool, default True
+        Whether to show significance legend.
+    significance_legend_title : str, default 'Significance'
+        Title for significance legend.
+    circle_background : str, default 'white'
+        Background color for cells when using circle markers.
+    
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        The main figure object.
+    ax : matplotlib.axes.Axes
+        The axes object containing the heatmap.
+    legend_figs : dict
+        Dictionary of legend figure objects.
+    colorbar_fig : matplotlib.figure.Figure or None
+        Separate colorbar figure if separate_colorbar=True.
+    dendrogram_info : dict
+        Dictionary containing dendrogram information and cluster assignments.
     """
     
     # Initialize dendrogram info dictionary
@@ -1670,6 +2041,10 @@ def plot_annotated_clustermap(
         if row_annotations is not None:
             row_annotations = row_annotations.iloc[row_order, :]
         
+        # Reorder significance data if provided
+        if significance_data is not None:
+            significance_data = significance_data.iloc[row_order, :]
+        
         dendrogram_info['row_order'] = row_order
     
     if col_linkage is not None:
@@ -1679,6 +2054,10 @@ def plot_annotated_clustermap(
         
         if col_annotations is not None:
             col_annotations = col_annotations.iloc[col_order, :]
+        
+        # Reorder significance data if provided
+        if significance_data is not None:
+            significance_data = significance_data.iloc[:, col_order]
         
         dendrogram_info['col_order'] = col_order
     
@@ -1825,6 +2204,8 @@ def plot_annotated_clustermap(
         heatmap_linecolor=heatmap_linecolor,
         patch_linewidths=patch_linewidths,
         patch_linecolor=patch_linecolor,
+        legend_patch_linewidths=legend_patch_linewidths,
+        legend_patch_linecolor=legend_patch_linecolor,
         row_patch_alpha=row_patch_alpha,
         col_patch_alpha=col_patch_alpha,
         xticklabels=xticklabels,
@@ -1854,6 +2235,19 @@ def plot_annotated_clustermap(
         col_separation_alpha=col_separation_alpha,
         separate_legends=separate_legends,
         legend_orientation=legend_orientation,
+        # Pass significance parameters
+        significance_data=significance_data,
+        significance_func=significance_func,
+        significance_marker=significance_marker,
+        significance_size_map=significance_size_map,
+        significance_color=significance_color,
+        significance_alpha=significance_alpha,
+        significance_linewidth=significance_linewidth,
+        significance_edgecolor=significance_edgecolor,
+        significance_text_size=significance_text_size,
+        show_significance_legend=show_significance_legend,
+        significance_legend_title=significance_legend_title,
+        circle_background=circle_background,
     )
     
     # Return with dendrogram info
