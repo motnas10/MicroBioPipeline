@@ -60,6 +60,7 @@ def get_font_sizes(width, height, unit="in", scale=5.0, type="text"):
         'label': round(10 * base_scale),
         'text': round(10 * base_scale),
         'node_label': round(6 * base_scale),
+        'edge_label': round(6 * base_scale),
     }
 
     return font_sizes

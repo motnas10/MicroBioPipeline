@@ -7,6 +7,7 @@ from matplotlib.patches import FancyBboxPatch
 from matplotlib.colors import Normalize, LinearSegmentedColormap
 from matplotlib.cm import ScalarMappable
 from typing import Optional, Dict, Tuple, Union, Literal, List, Sequence, Callable
+import warnings
 
 
 def create_network_from_data(
@@ -163,6 +164,8 @@ def plot_annotated_network(
     ax: Optional[plt.Axes] = None,
     figsize: Tuple[float, float] = (12, 10),
     title: str = 'Network Graph',
+    font_scale: float = 1.0,
+    font_size_func: Optional[Callable] = None,
     # Layout parameters
     layout: Union[str, Dict, Callable] = 'spring',
     layout_kws: Optional[Dict] = None,
@@ -186,7 +189,7 @@ def plot_annotated_network(
     # Node label parameters
     show_node_labels: bool = True,
     node_labels: Optional[Dict] = None,
-    node_label_size: float = 10,
+    node_label_size: Optional[float] = None,
     node_label_color: str = 'black',
     node_label_position: Literal['center', 'above', 'below'] = 'center',
     node_label_offset: float = 0.05,
@@ -206,7 +209,7 @@ def plot_annotated_network(
     show_edge_labels: bool = False,
     edge_labels: Optional[Dict] = None,
     edge_label_col: Optional[str] = None,
-    edge_label_size: float = 8,
+    edge_label_size: Optional[float] = None,
     edge_label_color: str = 'black',
     # Arrow parameters (for directed graphs)
     arrows: bool = True,
@@ -220,17 +223,23 @@ def plot_annotated_network(
     edge_legend_title: str = 'Edges',
     legend_position: Literal['right', 'left', 'top', 'bottom'] = 'right',
     legend_bbox: Tuple[float, float] = (1.02, 0.5),
-    legend_fontsize: float = 10,
+    legend_fontsize: Optional[float] = None,
+    separate_legends: bool = False,
+    legend_orientation: Literal['vertical', 'horizontal'] = 'vertical',
     # Colorbar parameters
     show_node_colorbar: bool = False,
     show_edge_colorbar: bool = False,
     node_colorbar_label: Optional[str] = None,
     edge_colorbar_label: Optional[str] = None,
     colorbar_orientation: Literal['vertical', 'horizontal'] = 'vertical',
+    separate_node_colorbar: bool = False,
+    separate_edge_colorbar: bool = False,
+    node_colorbar_figsize: Optional[Tuple[float, float]] = None,
+    edge_colorbar_figsize: Optional[Tuple[float, float]] = None,
     # Save parameters
     save_path: Optional[str] = None,
     dpi: int = 300,
-) -> Tuple[plt.Figure, plt.Axes, Union[nx.Graph, nx.DiGraph], Dict]:
+) -> Tuple[plt.Figure, plt.Axes, Union[nx.Graph, nx.DiGraph], Dict, Dict, Optional[plt.Figure], Optional[plt.Figure]]:
     """
     Plot an annotated network graph with customizable node and edge properties.
     
@@ -240,10 +249,8 @@ def plot_annotated_network(
         NetworkX graph or adjacency matrix/edge list to convert to graph.
     node_annotations : pd.DataFrame, optional
         DataFrame with node attributes (index should match node names).
-        Columns can be used for node_size_col, node_color_col, node_shape_col.
     edge_annotations : pd.DataFrame, optional
         DataFrame with edge attributes. Must have 'source' and 'target' columns.
-        Other columns can be used for edge_width_col, edge_color_col.
     graph_type : str, default 'undirected'
         Type of graph: 'undirected' or 'directed'.
     threshold : float, optional
@@ -262,13 +269,33 @@ def plot_annotated_network(
         Figure size (width, height).
     title : str, default 'Network Graph'
         Plot title.
+    font_scale : float, default 1.0
+        Scaling factor for all font sizes.
+    font_size_func : callable, optional
+        Custom function to calculate font sizes. Should accept (width, height, unit, scale)
+        and return a dict with keys: 'title', 'label', 'legend', 'legend_title', 'node_label', 'edge_label'.
     layout : str, dict, or callable, default 'spring'
         Graph layout. Options:
-        - 'spring': Force-directed layout
+        
+        NetworkX layouts:
+        - 'spring': Force-directed layout (Fruchterman-Reingold)
         - 'circular': Nodes in a circle
         - 'kamada_kawai': Force-directed with optimal distances
         - 'shell': Concentric circles
         - 'spectral': Based on graph Laplacian eigenvectors
+        - 'random': Random node positions
+        - 'spiral': Spiral layout
+        - 'planar': Planar layout (for planar graphs)
+        
+        Graphviz layouts (requires pygraphviz or pydot):
+        - 'dot': Hierarchical layout for directed graphs
+        - 'neato': Spring model layout
+        - 'fdp': Force-directed placement
+        - 'sfdp': Scalable force-directed placement (best for large graphs)
+        - 'circo': Circular layout
+        - 'twopi': Radial layout
+        
+        Custom:
         - dict: Pre-computed positions {node: (x, y)}
         - callable: Custom layout function
     layout_kws : dict, optional
@@ -276,13 +303,13 @@ def plot_annotated_network(
     node_size_col : str, optional
         Column in node_annotations to use for node sizes.
     node_size_map : dict, optional
-        Mapping from categories to sizes (if node_size_col is categorical).
+        Mapping from categories to sizes.
     node_size_scale : float, default 300
         Scaling factor for node sizes.
     node_color_col : str, optional
         Column in node_annotations to use for node colors.
     node_palette : dict, optional
-        Mapping from categories to colors (if node_color_col is categorical).
+        Mapping from categories to colors.
     node_cmap : str or colormap, default 'viridis'
         Colormap for continuous node colors.
     node_vmin : float, optional
@@ -292,13 +319,13 @@ def plot_annotated_network(
     node_shape_col : str, optional
         Column in node_annotations to use for node shapes.
     node_shape_map : dict, optional
-        Mapping from categories to shapes: 'o', 's', '^', 'v', 'D', 'p', '*', 'h', 'H', '+', 'x'.
+        Mapping from categories to shapes.
     default_node_size : float, default 300
         Default node size.
     default_node_color : str, default 'lightblue'
         Default node color.
     default_node_shape : str, default 'o'
-        Default node shape (matplotlib marker).
+        Default node shape.
     node_alpha : float, default 1.0
         Node transparency.
     node_edgecolors : str, default 'black'
@@ -308,15 +335,15 @@ def plot_annotated_network(
     show_node_labels : bool, default True
         Whether to show node labels.
     node_labels : dict, optional
-        Custom node labels {node: label}.
-    node_label_size : float, default 10
+        Custom node labels.
+    node_label_size : float, optional
         Font size for node labels.
     node_label_color : str, default 'black'
         Color of node labels.
     node_label_position : str, default 'center'
         Label position: 'center', 'above', or 'below'.
     node_label_offset : float, default 0.05
-        Offset for 'above' or 'below' label positions.
+        Offset for positioned labels.
     edge_width_col : str, optional
         Column in edge_annotations to use for edge widths.
     edge_width_scale : float, default 2.0
@@ -324,7 +351,7 @@ def plot_annotated_network(
     edge_color_col : str, optional
         Column in edge_annotations to use for edge colors.
     edge_palette : dict, optional
-        Mapping from categories to colors (if edge_color_col is categorical).
+        Mapping from categories to colors.
     edge_cmap : str or colormap, default 'coolwarm'
         Colormap for continuous edge colors.
     edge_vmin : float, optional
@@ -338,14 +365,14 @@ def plot_annotated_network(
     edge_alpha : float, default 0.7
         Edge transparency.
     edge_style : str, default 'solid'
-        Edge line style: 'solid', 'dashed', 'dotted', 'dashdot'.
+        Edge line style.
     show_edge_labels : bool, default False
         Whether to show edge labels.
     edge_labels : dict, optional
-        Custom edge labels {(source, target): label}.
+        Custom edge labels.
     edge_label_col : str, optional
         Column in edge_annotations to use for edge labels.
-    edge_label_size : float, default 8
+    edge_label_size : float, optional
         Font size for edge labels.
     edge_label_color : str, default 'black'
         Color of edge labels.
@@ -369,8 +396,12 @@ def plot_annotated_network(
         Legend position.
     legend_bbox : tuple, default (1.02, 0.5)
         Legend bounding box anchor.
-    legend_fontsize : float, default 10
+    legend_fontsize : float, optional
         Legend font size.
+    separate_legends : bool, default False
+        Create separate figure objects for each legend.
+    legend_orientation : str, default 'vertical'
+        Legend orientation: 'vertical' or 'horizontal'.
     show_node_colorbar : bool, default False
         Show colorbar for continuous node colors.
     show_edge_colorbar : bool, default False
@@ -381,6 +412,14 @@ def plot_annotated_network(
         Label for edge colorbar.
     colorbar_orientation : str, default 'vertical'
         Colorbar orientation.
+    separate_node_colorbar : bool, default False
+        Create separate figure for node colorbar.
+    separate_edge_colorbar : bool, default False
+        Create separate figure for edge colorbar.
+    node_colorbar_figsize : tuple, optional
+        Figure size for separate node colorbar.
+    edge_colorbar_figsize : tuple, optional
+        Figure size for separate edge colorbar.
     save_path : str, optional
         Path to save figure.
     dpi : int, default 300
@@ -395,29 +434,42 @@ def plot_annotated_network(
     G : nx.Graph or nx.DiGraph
         The NetworkX graph object.
     info : dict
-        Dictionary with plotting information (positions, node groups, edge groups).
+        Dictionary with plotting information.
+    legend_figs : dict
+        Dictionary of legend figure objects if separate_legends=True.
+    node_colorbar_fig : matplotlib.figure.Figure or None
+        Separate node colorbar figure if separate_node_colorbar=True.
+    edge_colorbar_fig : matplotlib.figure.Figure or None
+        Separate edge colorbar figure if separate_edge_colorbar=True.
     
     Examples
     --------
-    >>> # From adjacency matrix with node annotations
-    >>> G = create_network_from_data(adj_matrix, threshold=0.5)
-    >>> fig, ax, G, info = plot_annotated_network(
+    >>> # Using sfdp layout (requires installation)
+    >>> # pip install pygraphviz
+    >>> # or: pip install pydot
+    >>> fig, ax, G, info, legends, n_cbar, e_cbar = plot_annotated_network(
     ...     G,
+    ...     layout='sfdp',
+    ...     layout_kws={'overlap': 'scale'},
     ...     node_annotations=node_df,
     ...     node_size_col='degree',
-    ...     node_color_col='community',
-    ...     node_palette={'A': 'red', 'B': 'blue'},
-    ...     layout='spring'
+    ...     node_color_col='community'
     ... )
     
-    >>> # Directed network with edge weights
-    >>> fig, ax, G, info = plot_annotated_network(
-    ...     edge_list_df,
-    ...     graph_type='directed',
-    ...     edge_annotations=edge_df,
-    ...     edge_width_col='weight',
-    ...     edge_color_col='type',
-    ...     arrows=True
+    >>> # Using fdp layout with custom parameters
+    >>> fig, ax, G, info, legends, n_cbar, e_cbar = plot_annotated_network(
+    ...     G,
+    ...     layout='fdp',
+    ...     layout_kws={'K': 2.0, 'maxiter': 500},
+    ...     node_size_col='centrality'
+    ... )
+    
+    >>> # For large networks, sfdp is recommended
+    >>> fig, ax, G, info, legends, n_cbar, e_cbar = plot_annotated_network(
+    ...     large_graph,
+    ...     layout='sfdp',
+    ...     node_size_col='degree',
+    ...     show_node_labels=False
     ... )
     """
     
@@ -438,6 +490,34 @@ def plot_annotated_network(
     if fig is None or ax is None:
         fig, ax = plt.subplots(figsize=figsize)
     
+    # Calculate font sizes
+    if font_size_func is not None:
+        font_size = font_size_func(figsize[0], figsize[1], 'in', scale=font_scale)
+    else:
+        font_size = {
+            'title': 20,
+            'suptitle': 24,
+            'axes_label': 16,
+            'ticks_label': 14,
+            'legend': 7,
+            'legend_title': 8,
+            'annotation': 9,
+            'cbar_label': 12,
+            'cbar_ticks': 10,
+            'label': 10,
+            'text': 10,
+            'node_label': 6,
+            'edge_label': 6,
+        }
+    
+    # Apply font sizes to parameters if not explicitly set
+    if node_label_size is None:
+        node_label_size = font_size['node_label']
+    if edge_label_size is None:
+        edge_label_size = font_size['edge_label']
+    if legend_fontsize is None:
+        legend_fontsize = font_size['legend']
+    
     # Initialize layout_kws
     if layout_kws is None:
         layout_kws = {}
@@ -448,6 +528,7 @@ def plot_annotated_network(
     elif callable(layout):
         pos = layout(G, **layout_kws)
     elif isinstance(layout, str):
+        # Standard NetworkX layouts
         layout_functions = {
             'spring': nx.spring_layout,
             'circular': nx.circular_layout,
@@ -455,10 +536,36 @@ def plot_annotated_network(
             'shell': nx.shell_layout,
             'spectral': nx.spectral_layout,
             'random': nx.random_layout,
+            'spiral': nx.spiral_layout,
+            'planar': nx.planar_layout,
         }
-        if layout not in layout_functions:
-            raise ValueError(f"Unknown layout: {layout}. Choose from {list(layout_functions.keys())}")
-        pos = layout_functions[layout](G, **layout_kws)
+        
+        # Graphviz layouts (require pydot or pygraphviz)
+        graphviz_layouts = ['dot', 'neato', 'fdp', 'sfdp', 'circo', 'twopi']
+        
+        if layout in layout_functions:
+            pos = layout_functions[layout](G, **layout_kws)
+        elif layout in graphviz_layouts:
+            # Try to use graphviz layouts
+            try:
+                # First try with pygraphviz
+                pos = nx.nx_agraph.graphviz_layout(G, prog=layout, **layout_kws)
+            except (ImportError, AttributeError):
+                try:
+                    # Fall back to pydot
+                    pos = nx.nx_pydot.graphviz_layout(G, prog=layout, **layout_kws)
+                except (ImportError, AttributeError):
+                    warnings.warn(
+                        f"Layout '{layout}' requires pygraphviz or pydot. "
+                        f"Install with: pip install pygraphviz or pip install pydot. "
+                        f"Falling back to 'spring' layout."
+                    )
+                    pos = nx.spring_layout(G, **layout_kws)
+        else:
+            raise ValueError(
+                f"Unknown layout: {layout}. "
+                f"Choose from {list(layout_functions.keys()) + graphviz_layouts}"
+            )
     else:
         raise TypeError("layout must be str, dict, or callable")
     
@@ -566,7 +673,7 @@ def plot_annotated_network(
                 node_size=shape_sizes,
                 node_color=shape_colors,
                 node_shape=shape,
-                cmap=node_cmap_obj,  # Use the Colormap object
+                cmap=node_cmap_obj,
                 vmin=vmin_use,
                 vmax=vmax_use,
                 alpha=node_alpha,
@@ -602,14 +709,14 @@ def plot_annotated_network(
             if mask.any():
                 value = edge_annotations.loc[mask, edge_width_col].iloc[0]
                 if pd.notna(value):
-                    edge_widths.append(float(value) * edge_width_scale)
+                    edge_widths.append(abs(float(value)) * edge_width_scale)
                 else:
                     edge_widths.append(default_edge_width)
             else:
                 # Try getting from graph edge attributes
                 edge_data = G.get_edge_data(source, target)
                 if edge_data and edge_width_col in edge_data:
-                    edge_widths.append(float(edge_data[edge_width_col]) * edge_width_scale)
+                    edge_widths.append(abs(float(edge_data[edge_width_col])) * edge_width_scale)
                 else:
                     edge_widths.append(default_edge_width)
     elif edge_width_col == 'weight':
@@ -697,7 +804,7 @@ def plot_annotated_network(
             G, pos,
             width=edge_widths,
             edge_color=edge_colors,
-            edge_cmap=edge_cmap_obj,  # Use the Colormap object
+            edge_cmap=edge_cmap_obj,
             edge_vmin=vmin_use,
             edge_vmax=vmax_use,
             alpha=edge_alpha,
@@ -780,22 +887,98 @@ def plot_annotated_network(
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
     
-    legend_handles = []
+    legend_figs = {}
+    
+    # Prepare legend handles
+    legend_dict = {}
     
     if show_node_legend and node_is_categorical and node_categories:
+        node_handles = []
         for category, cat_nodes in node_categories.items():
             color = node_palette.get(category, default_node_color) if node_palette else default_node_color
             handle = Line2D([0], [0], marker='o', color='w', 
                           markerfacecolor=color, markersize=10,
                           label=str(category), linestyle='None')
-            legend_handles.append(handle)
+            node_handles.append(handle)
+        
+        legend_dict['node'] = {
+            'handles': node_handles,
+            'title': node_legend_title,
+            'n_items': len(node_handles)
+        }
     
-    if legend_handles:
-        ax.legend(handles=legend_handles, title=node_legend_title,
-                 loc='center left' if legend_position == 'right' else 'center right',
-                 bbox_to_anchor=legend_bbox, fontsize=legend_fontsize)
+    if show_edge_legend and edge_is_categorical and edge_categories:
+        edge_handles = []
+        for category, cat_edges in edge_categories.items():
+            color = edge_palette.get(category, default_edge_color) if edge_palette else default_edge_color
+            handle = Line2D([0], [0], color=color, linewidth=2,
+                          label=str(category))
+            edge_handles.append(handle)
+        
+        legend_dict['edge'] = {
+            'handles': edge_handles,
+            'title': edge_legend_title,
+            'n_items': len(edge_handles)
+        }
     
-    # Add colorbars
+    # Handle legends
+    if separate_legends:
+        # Create separate figures for each legend
+        for key, legend_info in legend_dict.items():
+            n_items = legend_info['n_items']
+            if legend_orientation == 'horizontal':
+                figsize_legend = (n_items * 1.5, 1)
+            else:
+                figsize_legend = (2, n_items * 0.5 + 0.5)
+            
+            l_fig = plt.figure(figsize=figsize_legend)
+            l_ax = l_fig.add_subplot(111)
+            l_ax.axis('off')
+            
+            ncol = n_items if legend_orientation == 'horizontal' else 1
+            l_ax.legend(
+                handles=legend_info['handles'],
+                title=legend_info['title'],
+                loc='center',
+                ncol=ncol,
+                frameon=False,
+                fontsize=legend_fontsize,
+                title_fontsize=font_size['legend_title']
+            )
+            legend_figs[key] = l_fig
+            
+            if save_path is not None:
+                base, ext = save_path.rsplit('.', 1) if '.' in save_path else (save_path, 'png')
+                l_save_path = f"{base}_legend_{key}.{ext}"
+                l_fig.savefig(l_save_path, dpi=dpi, bbox_inches='tight')
+    else:
+        # Add legends to main plot
+        if legend_dict:
+            all_handles = []
+            all_labels = []
+            
+            for key in ['node', 'edge']:  # Order: node legend first, then edge
+                if key in legend_dict:
+                    legend_info = legend_dict[key]
+                    all_handles.extend(legend_info['handles'])
+                    all_labels.extend([h.get_label() for h in legend_info['handles']])
+            
+            if all_handles:
+                ncol = len(all_handles) if legend_orientation == 'horizontal' else 1
+                ax.legend(
+                    handles=all_handles,
+                    loc='center left' if legend_position == 'right' else 'center right',
+                    bbox_to_anchor=legend_bbox,
+                    fontsize=legend_fontsize,
+                    ncol=ncol,
+                    frameon=True
+                )
+    
+    # Handle colorbars
+    node_colorbar_fig = None
+    edge_colorbar_fig = None
+    
+    # Node colorbar
     if show_node_colorbar and not node_is_categorical and node_color_col:
         vmin_use = node_vmin if node_vmin is not None else min([c for c in node_colors if not np.isnan(c)], default=0)
         vmax_use = node_vmax if node_vmax is not None else max([c for c in node_colors if not np.isnan(c)], default=1)
@@ -809,10 +992,37 @@ def plot_annotated_network(
         
         sm = ScalarMappable(cmap=node_cmap_obj, norm=Normalize(vmin=vmin_use, vmax=vmax_use))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, orientation=colorbar_orientation, pad=0.05)
-        if node_colorbar_label:
-            cbar.set_label(node_colorbar_label)
+        
+        if separate_node_colorbar:
+            # Create separate colorbar figure
+            if node_colorbar_figsize is None:
+                if colorbar_orientation == 'vertical':
+                    node_colorbar_figsize = (2, 6)
+                else:
+                    node_colorbar_figsize = (6, 1.5)
+            
+            node_colorbar_fig = plt.figure(figsize=node_colorbar_figsize)
+            cbar_ax = node_colorbar_fig.add_axes([0.1, 0.1, 0.8, 0.8])
+            
+            cbar = plt.colorbar(sm, cax=cbar_ax, orientation=colorbar_orientation)
+            if node_colorbar_label:
+                cbar.set_label(node_colorbar_label, fontsize=font_size['label'])
+            cbar.ax.tick_params(labelsize=font_size['legend'])
+            cbar.outline.set_linewidth(0.5)
+            cbar.outline.set_edgecolor('black')
+            
+            if save_path is not None:
+                base, ext = save_path.rsplit('.', 1) if '.' in save_path else (save_path, 'png')
+                cbar_save_path = f"{base}_node_colorbar.{ext}"
+                node_colorbar_fig.savefig(cbar_save_path, dpi=dpi, bbox_inches='tight')
+        else:
+            # Add to main plot
+            cbar = plt.colorbar(sm, ax=ax, orientation=colorbar_orientation, pad=0.05)
+            if node_colorbar_label:
+                cbar.set_label(node_colorbar_label, fontsize=font_size['label'])
+            cbar.ax.tick_params(labelsize=font_size['legend'])
     
+    # Edge colorbar
     if show_edge_colorbar and not edge_is_categorical and edge_color_col:
         vmin_use = edge_vmin if edge_vmin is not None else min([c for c in edge_colors if not np.isnan(c)], default=0)
         vmax_use = edge_vmax if edge_vmax is not None else max([c for c in edge_colors if not np.isnan(c)], default=1)
@@ -826,12 +1036,39 @@ def plot_annotated_network(
         
         sm = ScalarMappable(cmap=edge_cmap_obj, norm=Normalize(vmin=vmin_use, vmax=vmax_use))
         sm.set_array([])
-        cbar = plt.colorbar(sm, ax=ax, orientation=colorbar_orientation, pad=0.1)
-        if edge_colorbar_label:
-            cbar.set_label(edge_colorbar_label)
+        
+        if separate_edge_colorbar:
+            # Create separate colorbar figure
+            if edge_colorbar_figsize is None:
+                if colorbar_orientation == 'vertical':
+                    edge_colorbar_figsize = (2, 6)
+                else:
+                    edge_colorbar_figsize = (6, 1.5)
+            
+            edge_colorbar_fig = plt.figure(figsize=edge_colorbar_figsize)
+            cbar_ax = edge_colorbar_fig.add_axes([0.1, 0.1, 0.8, 0.8])
+            
+            cbar = plt.colorbar(sm, cax=cbar_ax, orientation=colorbar_orientation)
+            if edge_colorbar_label:
+                cbar.set_label(edge_colorbar_label, fontsize=font_size['label'])
+            cbar.ax.tick_params(labelsize=font_size['legend'])
+            cbar.outline.set_linewidth(0.5)
+            cbar.outline.set_edgecolor('black')
+            
+            if save_path is not None:
+                base, ext = save_path.rsplit('.', 1) if '.' in save_path else (save_path, 'png')
+                cbar_save_path = f"{base}_edge_colorbar.{ext}"
+                edge_colorbar_fig.savefig(cbar_save_path, dpi=dpi, bbox_inches='tight')
+        else:
+            # Add to main plot
+            pad_value = 0.1 if show_node_colorbar and not separate_node_colorbar else 0.05
+            cbar = plt.colorbar(sm, ax=ax, orientation=colorbar_orientation, pad=pad_value)
+            if edge_colorbar_label:
+                cbar.set_label(edge_colorbar_label, fontsize=font_size['label'])
+            cbar.ax.tick_params(labelsize=font_size['legend'])
     
     # Styling
-    ax.set_title(title, fontsize=14, pad=20)
+    ax.set_title(title, fontsize=font_size['title'], pad=20)
     ax.axis('off')
     plt.tight_layout()
     
@@ -850,4 +1087,4 @@ def plot_annotated_network(
         'edge_colors': dict(zip(edges, edge_colors)),
     }
     
-    return fig, ax, G, info
+    return fig, ax, G, info, legend_figs, node_colorbar_fig, edge_colorbar_fig
