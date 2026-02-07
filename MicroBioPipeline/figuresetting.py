@@ -54,7 +54,7 @@ def get_font_sizes(width, height, unit="in", scale=5.0, type="text"):
         'ticks_label': round(5 * base_scale) if type == "text" else round(10 * base_scale),
         'legend': round(7 * base_scale),
         'legend_title': round(8 * base_scale),
-        'annotation': round(9 * base_scale),
+        'annotation': round(4 * base_scale),
         'cbar_label': round(12 * base_scale),
         'cbar_ticks': round(10 * base_scale),
         'label': round(10 * base_scale),
