@@ -678,40 +678,44 @@ import networkx as nx
 
 def percolation_threshold(corr_matrix):
     """
-    Increases threshold for absolute edge weight until the graph just starts to disconnect.
-    Returns the largest threshold matrix that is still fully connected.
+    Calculates the percolation threshold using the Maximum Spanning Tree (MST).
+    Returns the largest threshold where the graph remains fully connected.
     """
-    abs_weights = np.abs(corr_matrix.values)
-    n_nodes = corr_matrix.shape[0]
-    abs_weights[range(n_nodes), range(n_nodes)] = 0 # zero out diagonal
+    # 1. Create an edge list from the correlation matrix
+    # We take absolute values and filter for the upper triangle (k=1)
+    # to avoid self-loops (diagonal) and duplicates.
+    abs_matrix = corr_matrix.abs()
+    mask = np.triu(np.ones(abs_matrix.shape), k=1).astype(bool)
+    
+    # stack() is a vectorized pandas operation, much faster than looping
+    edges = abs_matrix.where(mask).stack().reset_index()
+    edges.columns = ['source', 'target', 'weight']
+    
+    # 2. Build the full graph
+    G = nx.from_pandas_edgelist(edges, 'source', 'target', ['weight'])
+    G.add_nodes_from(corr_matrix.index) # Ensure isolated nodes are included
+    
+    # 3. Quick check: Is the graph connected even with all edges?
+    # If not, no threshold can fix it.
+    if not nx.is_connected(G):
+        return 0.0, corr_matrix
 
-    # Get all unique non-diagonal weights (upper triangle)
-    weights = abs_weights[np.triu_indices(n_nodes, k=1)]
-    thresholds = np.unique(np.sort(weights)) # ascending order
+    # 4. Compute Maximum Spanning Tree
+    # The MST finds the "backbone" of the strongest connections.
+    mst = nx.maximum_spanning_tree(G, weight='weight')
+    
+    # The percolation threshold is exactly the minimum weight in this backbone.
+    # Removing this specific edge (by raising the threshold) would disconnect the graph.
+    if mst.number_of_edges() > 0:
+        final_thresh = min(d['weight'] for u, v, d in mst.edges(data=True))
+    else:
+        final_thresh = 0.0 # Handle single-node case
 
-    # Iterate over thresholds, keep lowest ones first
-    final_matrix = corr_matrix.values.copy()
-    final_thresh = 0
-    for thresh in thresholds:
-        mask = abs_weights >= thresh
-        temp_matrix = corr_matrix.values * mask
-
-        # Build graph
-        G = nx.Graph()
-        nodes = corr_matrix.index.tolist()
-        G.add_nodes_from(nodes)
-        for i in range(n_nodes):
-            for j in range(i+1, n_nodes):
-                if mask[i, j]:
-                    G.add_edge(nodes[i], nodes[j], weight=temp_matrix[i, j])
-
-        if nx.is_connected(G): # still connected, keep going
-            final_matrix = temp_matrix.copy()
-            final_thresh = thresh
-        else: # disconnected, stop at previous threshold
-            break
-
-    thresholded_df = pd.DataFrame(final_matrix, index=corr_matrix.index, columns=corr_matrix.columns)
+    # 5. Apply the threshold to the original matrix
+    # We keep edges where |weight| >= final_thresh
+    final_mask = abs_matrix >= final_thresh
+    thresholded_df = corr_matrix.where(final_mask, 0.0)
+    
     return final_thresh, thresholded_df
 
 
