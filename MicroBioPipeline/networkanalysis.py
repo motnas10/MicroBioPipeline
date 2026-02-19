@@ -650,7 +650,7 @@ class NetworkPlotter:
         )
         
         # Draw labels
-        nx.draw_networkx_labels(self.G, self.pos, ax=ax, font_size=label_font_size)
+        # nx.draw_networkx_labels(self.G, self.pos, ax=ax, font_size=label_font_size)
         
         # Add edge colorbar
         edge_sm = self._create_edge_scalar_mappable(cmap, edge_vmin, edge_vmax)
@@ -1484,13 +1484,13 @@ def plot_communities(G,
         legend=False,
         legend_font_size=font_size["legend"]//2,
         colorbar_font_size=font_size["cbar_ticks"],
-        label_font_size=font_size["ticks_label"]//3,
+        label_font_size=0,
         title_font_size=font_size["title"],
         cmap=cmap,
         edge_vmin=edge_vmin,
         edge_vmax=edge_vmax,
         default_equal_node_size=True,
-        default_node_size=300,
+        default_node_size=10,
         filename=filename
     )
 
@@ -1534,13 +1534,13 @@ def plot_metastable_nodes(G,
         legend=False,
         legend_font_size=font_size["legend"]//2,
         colorbar_font_size=font_size["cbar_ticks"],
-        label_font_size=font_size["ticks_label"]//3,
+        label_font_size=0,
         title_font_size=font_size["title"],
         cmap=cmap,
         edge_vmin=edge_vmin,
         edge_vmax=edge_vmax,
         default_equal_node_size=False,  # Allow variable sizes
-        default_node_size=300,
+        default_node_size=10,
         filename=filename
     )
 
